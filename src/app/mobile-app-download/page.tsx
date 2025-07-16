@@ -1,7 +1,12 @@
-"use client";
+'use client'
 
-import { useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import Image from 'next/image'
+
+// Force dynamic rendering since we use searchParams
+export const dynamic = 'force-dynamic'
 
 export default function MobileAppDownloadPage() {
   const searchParams = useSearchParams();

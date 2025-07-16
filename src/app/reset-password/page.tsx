@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import Image from 'next/image'
+
+// Force dynamic rendering since we use searchParams
+export const dynamic = 'force-dynamic'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
