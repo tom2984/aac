@@ -6,9 +6,29 @@ const config: Config = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  safelist: [
+    'bg-yellow-100',
+    'bg-red-200',
+    'bg-blue-300',
+    'gap-2',
+    'gap-4',
+    'w-5',
+    'h-5',
+    'flex',
+    'items-center',
+    'justify-center',
+    'text-[#FF6551]',
+    'text-[#272937]',
+    'text-[16px]',
+    'rounded-lg',
+  ],
   theme: {
     extend: {
       colors: {
+        grayPrimary: '#272937',
+        grayPrimary12: '#2729371F',
+        grayPrimary50: '#27293780',
+        grayPrimary60: '#27293799',
         primary: {
           50: '#f0f9ff',
           100: '#e0f2fe',
@@ -37,11 +57,12 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-inter)'],
+        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        inter: ['var(--font-inter)', 'system-ui', 'sans-serif'],
       },
     },
   },
   plugins: [],
 }
 
-export default config 
+export default config

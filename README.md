@@ -1,93 +1,123 @@
-# AAC - Construction Forms Platform
+# AAC - Form Management System
 
-A modern, responsive form management platform built for construction companies. This platform allows for easy creation, management, and submission of forms, similar to Typeform but specifically designed for construction industry needs.
+A comprehensive form management system built with Next.js, React, TypeScript, TailwindCSS, and Supabase. This system provides separate platforms for admins (web dashboard) and employees (mobile app) to manage and complete forms.
 
 ## Features
 
-- 🏗️ Form Builder Interface
-- 📱 Mobile & Web Responsive Design
-- 🔐 Secure Authentication
-- 📊 Form Response Management
-- 🎨 Modern UI with Tailwind CSS
-- ⚡ Built with Next.js 14
-- 🔄 Real-time Updates with Supabase
+### Admin Dashboard (Web)
+- **Form Builder**: Create forms with dynamic question types (short text, long text, single select, multi select)
+- **Preset Questions**: Save frequently used questions for reuse across multiple forms
+- **Team Management**: Invite employees and manage team members
+- **Form Assignment**: Assign forms to specific employees with due dates
+- **Analytics Dashboard**: View form completion statistics and insights
+- **Role-based Access**: Secure admin-only access to dashboard features
+
+### Employee Experience (Mobile)
+- **Mobile App**: Dedicated mobile application for form completion
+- **Form Assignment**: Receive assigned forms with clear due dates
+- **Progress Tracking**: Track completion status of assigned forms
+- **Offline Support**: Complete forms offline and sync when connected
 
 ## Tech Stack
 
-- **Framework:** Next.js 14
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Database:** Supabase
-- **Authentication:** Supabase Auth
-- **Form Handling:** React Hook Form
-- **Validation:** Zod
-- **UI Components:** Headless UI
-- **Icons:** Heroicons
+- **Frontend**: Next.js 14, React 18, TypeScript
+- **Styling**: TailwindCSS, Headless UI
+- **Backend**: Supabase (PostgreSQL database, Authentication, Real-time)
+- **State Management**: React Hooks, React Hook Form
+- **Charts**: Recharts
+- **Icons**: Heroicons, Lucide React
+
+## Database Schema
+
+The system uses Supabase with the following main tables:
+- `profiles` - User profiles with roles (admin/employee) and status
+- `forms` - Form definitions with metadata and settings
+- `form_questions` - Questions within forms with types and options
+- `form_assignments` - Links between forms and employees
+- `form_responses` - Employee form submissions
+- `form_response_answers` - Individual answers to form questions
+- `preset_questions` - Reusable questions saved by admins
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18.17 or later
+- Node.js 18 or later
 - npm or yarn
 - Supabase account
 
 ### Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/aac.git
-   cd aac
-   ```
+```bash
+git clone <repository-url>
+cd aac
+```
 
 2. Install dependencies:
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-3. Set up environment variables:
-   Create a `.env.local` file in the root directory with the following variables:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your-project-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
-   ```
+3. Create a `.env.local` file in the root directory with the following variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+```
 
 4. Run the development server:
-   ```bash
-   npm run dev
-   ```
+```bash
+npm run dev
+```
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Project Structure
+### Database Setup
 
-```
-aac/
-├── src/
-│   ├── app/              # Next.js app directory
-│   ├── components/       # Reusable components
-│   ├── lib/             # Utility functions and configurations
-│   └── types/           # TypeScript type definitions
-├── public/              # Static assets
-└── ...config files
-```
+The system includes SQL migrations in the `supabase/migrations/` directory. Apply these migrations to set up your database schema:
 
-## Development
+1. Install Supabase CLI
+2. Link your project: `supabase link --project-ref your-project-ref`
+3. Apply migrations: `supabase db push`
+
+## Scripts
 
 - `npm run dev` - Start development server
-- `npm run build` - Build for production
+- `npm run build` - Build production application
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
 
-## Database Schema
+## User Roles and Access
 
-The project uses Supabase with the following main tables:
-- `forms` - Form definitions
-- `form_questions` - Questions within forms
-- `form_responses` - Form submissions
-- `form_response_answers` - Individual answers to questions
+### Admin Users
+- Access to full web dashboard at `/dashboard`
+- Can create and manage forms
+- Can invite and manage employees
+- Can view analytics and form responses
+- Role: `admin` in database
+
+### Employee Users
+- Redirected to mobile app download page
+- Cannot access web dashboard
+- Receive form assignments via the mobile app
+- Role: `employee` in database
+
+## Form Assignment Workflow
+
+1. **Admin creates form** - Using the form builder with dynamic questions
+2. **Admin assigns form** - Selects employees and sets due dates
+3. **Employee receives assignment** - Via mobile app notification
+4. **Employee completes form** - Using mobile app interface
+5. **Admin reviews responses** - Via analytics dashboard
+
+## Question Types Supported
+
+- **Short Text**: Single-line text input
+- **Long Text**: Multi-line textarea input
+- **Single Select**: Radio button selection from options
+- **Multi Select**: Checkbox selection allowing multiple choices
 
 ## Contributing
 
