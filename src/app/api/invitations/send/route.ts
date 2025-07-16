@@ -146,7 +146,7 @@ export async function POST(request: Request) {
           console.log('📧 Sending email to:', email)
           
           const emailResult = await resend.emails.send({
-            from: 'AAC Team <onboarding@aacapp.resend.dev>', // Use proper Resend domain
+            from: 'AAC Team <onboarding@resend.dev>', // Use Resend's verified testing domain
             to: [email], // Resend prefers array format
             subject: `You're invited to join the AAC team!`,
             html: `
