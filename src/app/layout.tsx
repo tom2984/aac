@@ -2,7 +2,6 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { UserProvider } from './UserProvider'
-import { MarkerIO } from '../components/MarkerIO'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -28,11 +27,26 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.markerConfig = {
+                project: '6877c535023390f021d37be52',
+                source: 'snippet'
+              };
+            `
+          }}
+        />
+        <script
+          async
+          src="https://edge.marker.io/latest/shim.js"
+        />
+      </head>
       <body className="min-h-screen bg-gray-50 font-sans">
         <UserProvider>
           {children}
         </UserProvider>
-        <MarkerIO />
       </body>
     </html>
   )
