@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { UserProvider } from './UserProvider'
 
 const inter = Inter({ 
@@ -27,8 +28,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <head>
-        <script
+      <body className="min-h-screen bg-gray-50 font-sans">
+        <Script
+          id="marker-config"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               window.markerConfig = {
@@ -38,12 +41,10 @@ export default function RootLayout({
             `
           }}
         />
-        <script
-          async
+        <Script
           src="https://edge.marker.io/latest/shim.js"
+          strategy="afterInteractive"
         />
-      </head>
-      <body className="min-h-screen bg-gray-50 font-sans">
         <UserProvider>
           {children}
         </UserProvider>
