@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -8,7 +9,7 @@ import Image from 'next/image'
 // Force dynamic rendering since we use searchParams
 export const dynamic = 'force-dynamic'
 
-export default function MobileAppDownloadPage() {
+function MobileAppDownloadContent() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
 
@@ -111,5 +112,24 @@ export default function MobileAppDownloadPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6551] mx-auto"></div>
+        <p className="mt-2 text-gray-600 font-inter">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function MobileAppDownloadPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <MobileAppDownloadContent />
+    </Suspense>
   );
 } 

@@ -1,14 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 // GET /api/notifications - Fetch notifications for current user
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
+    
     const { searchParams } = new URL(request.url)
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const limit = parseInt(searchParams.get('limit') || '20')
@@ -65,6 +73,9 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Notifications API error:', error)
+    if (error instanceof Error && error.message.includes('Missing Supabase')) {
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -72,6 +83,8 @@ export async function GET(request: NextRequest) {
 // PATCH /api/notifications - Mark notifications as read
 export async function PATCH(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
+    
     const body = await request.json()
     const { notification_ids, mark_all_read } = body
 
@@ -114,6 +127,9 @@ export async function PATCH(request: NextRequest) {
 
   } catch (error) {
     console.error('Notifications update error:', error)
+    if (error instanceof Error && error.message.includes('Missing Supabase')) {
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

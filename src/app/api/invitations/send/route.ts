@@ -1,48 +1,37 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Regular client for auth
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Service role client for admin operations (bypasses RLS)
-let supabaseAdmin: any = null
-
-try {
+function getSupabaseClients() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
   
-  if (!serviceRoleKey) {
-    console.error('❌ Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
-  } else {
-    supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
-    console.log('✅ Service role client initialized successfully')
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Missing Supabase public environment variables')
   }
-} catch (error) {
-  console.error('❌ Failed to initialize service role client:', error)
+  
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+  }
+  
+  // Regular client for auth
+  const supabase = createClient(supabaseUrl, anonKey)
+  
+  // Service role client for admin operations (bypasses RLS)
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+  
+  return { supabase, supabaseAdmin }
 }
 
 export async function POST(request: Request) {
   try {
-    // Check if service role client is available
-    if (!supabaseAdmin) {
-      console.error('❌ Service role client not available')
-      return NextResponse.json({ 
-        error: 'Server configuration error: Missing service role key',
-        hint: 'Please set SUPABASE_SERVICE_ROLE_KEY environment variable'
-      }, { status: 500 })
-    }
-
+    const { supabase, supabaseAdmin } = getSupabaseClients()
+    
     const { emails, role = 'employee' } = await request.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
@@ -175,6 +164,9 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Invitation API error:', error)
+    if (error instanceof Error && error.message.includes('Missing Supabase')) {
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    }
     return NextResponse.json(
       { error: 'Failed to process invitations' },
       { status: 500 }

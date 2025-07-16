@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
+    
     const { searchParams } = new URL(request.url)
     
     // Extract filter parameters
@@ -122,6 +130,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Forms API error:', error)
+    if (error instanceof Error && error.message.includes('Missing Supabase')) {
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    }
     return NextResponse.json({ 
       error: 'Failed to get forms' 
     }, { status: 500 })
@@ -130,6 +141,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = getSupabaseClient()
+    
     const formData = await request.json()
     
     const { data, error } = await supabase
@@ -144,6 +157,10 @@ export async function POST(request: Request) {
     
     return NextResponse.json({ data })
   } catch (error) {
+    console.error('Forms POST API error:', error)
+    if (error instanceof Error && error.message.includes('Missing Supabase')) {
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    }
     return NextResponse.json({ 
       error: 'Failed to create form' 
     }, { status: 500 })

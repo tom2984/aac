@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -9,7 +10,7 @@ import Image from 'next/image'
 // Force dynamic rendering since we use searchParams
 export const dynamic = 'force-dynamic'
 
-export default function AcceptInvitePage() {
+function AcceptInviteForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -151,33 +152,6 @@ export default function AcceptInvitePage() {
     }
   };
 
-  // if (inviteValid === null) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-  //       <div className="max-w-md w-full space-y-8">
-  //         <div className="text-center">
-  //           <h2 className="text-2xl font-bold text-gray-900">Loading...</h2>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // if (inviteValid === false) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-  //       <div className="max-w-md w-full space-y-8">
-  //         <div className="text-center">
-  //           <h2 className="text-2xl font-bold text-gray-900">Invalid Invitation</h2>
-  //           <p className="mt-2 text-gray-600">
-  //             This invitation link is invalid or has already been used.
-  //           </p>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -294,5 +268,26 @@ export default function AcceptInvitePage() {
         </form>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6551] mx-auto"></div>
+          <h2 className="mt-4 text-2xl font-bold text-gray-900">Loading...</h2>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <AcceptInviteForm />
+    </Suspense>
   );
 } 
