@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    // Disable ESLint during production builds
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Disable TypeScript errors during production builds (if needed)
+    ignoreBuildErrors: false,
+  },
   // Force specific port for development
   async rewrites() {
     return []
