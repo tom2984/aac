@@ -138,8 +138,11 @@ export async function POST(request: Request) {
 
         // Send email using Resend
         try {
+          console.log('🔑 About to send email with Resend API key:', process.env.RESEND_API_KEY ? 'Found' : 'Missing')
+          console.log('📧 Sending email to:', email)
+          
           const emailResult = await resend.emails.send({
-            from: 'AAC Team <onboarding@resend.dev>', // Change this to your verified domain
+            from: 'onboarding@resend.dev', // Simplified from address
             to: email,
             subject: `You're invited to join the AAC team!`,
             html: `
@@ -191,6 +194,9 @@ export async function POST(request: Request) {
               </html>
             `
           })
+
+          console.log('✅ Email send result:', emailResult)
+          console.log('📧 Email ID:', emailResult.data?.id)
 
           results.push({
             email,
