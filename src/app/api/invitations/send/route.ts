@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 
 function getSupabaseClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -28,9 +29,20 @@ function getSupabaseClients() {
   return { supabase, supabaseAdmin }
 }
 
+function getResendClient() {
+  const resendApiKey = process.env.RESEND_API_KEY
+  
+  if (!resendApiKey) {
+    throw new Error('Missing RESEND_API_KEY environment variable')
+  }
+  
+  return new Resend(resendApiKey)
+}
+
 export async function POST(request: Request) {
   try {
     const { supabase, supabaseAdmin } = getSupabaseClients()
+    const resend = getResendClient()
     
     const { emails, role = 'employee' } = await request.json()
 
@@ -54,7 +66,7 @@ export async function POST(request: Request) {
     // Validate that the current user is an admin using service role client (bypasses RLS)
     const { data: currentUserProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('role')
+      .select('role, first_name, last_name')
       .eq('id', user.id)
       .single()
 
@@ -66,6 +78,7 @@ export async function POST(request: Request) {
     console.log('✅ Admin verification successful for user:', user.id)
 
     const results = []
+    const adminName = `${currentUserProfile.first_name || 'Admin'} ${currentUserProfile.last_name || ''}`.trim()
 
     for (const email of emails) {
       try {
@@ -123,19 +136,81 @@ export async function POST(request: Request) {
                        'http://localhost:3000'
         const inviteLink = `${baseUrl}/accept-invite?token=${token}`
 
-        // Here you would normally send an email using:
-        // - Supabase Edge Functions with email service
-        // - External email service like Resend, SendGrid, etc.
-        // - Custom email integration
+        // Send email using Resend
+        try {
+          const emailResult = await resend.emails.send({
+            from: 'AAC Team <onboarding@resend.dev>', // Change this to your verified domain
+            to: email,
+            subject: `You're invited to join the AAC team!`,
+            html: `
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <meta charset="utf-8">
+                  <title>Team Invitation</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #FF6551; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+                    .button { display: inline-block; background: #FF6551; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+                    .footer { margin-top: 30px; font-size: 14px; color: #666; }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="header">
+                      <h1>Welcome to AAC!</h1>
+                    </div>
+                    <div class="content">
+                      <h2>You've been invited to join our team</h2>
+                      <p>Hi there!</p>
+                      <p><strong>${adminName}</strong> has invited you to join the AAC form management system as ${role === 'admin' ? 'an administrator' : 'a team member'}.</p>
+                      
+                      <p>To get started, click the button below to create your account:</p>
+                      
+                      <a href="${inviteLink}" class="button">Accept Invitation</a>
+                      
+                      <p>Or copy and paste this link into your browser:</p>
+                      <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 4px;">${inviteLink}</p>
+                      
+                      <div class="footer">
+                        <p><strong>What happens next?</strong></p>
+                        <ul>
+                          <li>Create your account using the link above</li>
+                          <li>Complete your profile information</li>
+                          <li>${role === 'admin' ? 'Access the admin dashboard to manage forms and team members' : 'Download the mobile app to complete assigned forms'}</li>
+                        </ul>
+                        
+                        <p>If you have any questions, please contact ${adminName} or your system administrator.</p>
+                        <p><em>This invitation will expire in 7 days for security reasons.</em></p>
+                      </div>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `
+          })
 
-        // For now, we'll just return the link for manual sending
-        results.push({
-          email,
-          status: 'success',
-          inviteLink,
-          token,
-          message: 'Invitation created successfully'
-        })
+          results.push({
+            email,
+            status: 'success',
+            emailId: emailResult.data?.id,
+            inviteLink, // Still provide link as backup
+            message: 'Invitation email sent successfully'
+          })
+
+        } catch (emailError) {
+          // If email sending fails, still return the link for manual sending
+          console.error('Email sending failed:', emailError)
+          results.push({
+            email,
+            status: 'email_failed',
+            inviteLink,
+            message: 'Invite created but email sending failed. Please send the link manually.',
+            error: emailError instanceof Error ? emailError.message : 'Unknown email error'
+          })
+        }
 
       } catch (error) {
         results.push({
@@ -148,6 +223,7 @@ export async function POST(request: Request) {
 
     // Count successful invitations
     const successCount = results.filter(r => r.status === 'success').length
+    const emailFailedCount = results.filter(r => r.status === 'email_failed').length
     const errorCount = results.filter(r => r.status === 'error').length
     const skippedCount = results.filter(r => r.status === 'skipped').length
 
@@ -156,6 +232,7 @@ export async function POST(request: Request) {
       summary: {
         total: emails.length,
         successful: successCount,
+        emailFailed: emailFailedCount,
         errors: errorCount,
         skipped: skippedCount
       },
@@ -164,8 +241,8 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Invitation API error:', error)
-    if (error instanceof Error && error.message.includes('Missing Supabase')) {
-      return NextResponse.json({ error: 'Configuration error' }, { status: 500 })
+    if (error instanceof Error && error.message.includes('Missing')) {
+      return NextResponse.json({ error: 'Configuration error: ' + error.message }, { status: 500 })
     }
     return NextResponse.json(
       { error: 'Failed to process invitations' },
