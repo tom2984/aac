@@ -44,6 +44,10 @@ export async function POST(request: Request) {
     const { supabase, supabaseAdmin } = getSupabaseClients()
     const resend = getResendClient()
     
+    // Test Resend configuration
+    console.log('📧 Resend API Key present:', !!process.env.RESEND_API_KEY)
+    console.log('📧 Resend API Key length:', process.env.RESEND_API_KEY?.length || 0)
+    
     const { emails, role = 'employee' } = await request.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
@@ -142,8 +146,8 @@ export async function POST(request: Request) {
           console.log('📧 Sending email to:', email)
           
           const emailResult = await resend.emails.send({
-            from: 'onboarding@resend.dev', // Simplified from address
-            to: email,
+            from: 'AAC Team <onboarding@aacapp.resend.dev>', // Use proper Resend domain
+            to: [email], // Resend prefers array format
             subject: `You're invited to join the AAC team!`,
             html: `
               <!DOCTYPE html>
@@ -208,7 +212,9 @@ export async function POST(request: Request) {
 
         } catch (emailError) {
           // If email sending fails, still return the link for manual sending
-          console.error('Email sending failed:', emailError)
+          console.error('❌ Email sending failed for', email, ':', emailError)
+          console.error('❌ Error details:', JSON.stringify(emailError, null, 2))
+          
           results.push({
             email,
             status: 'email_failed',
