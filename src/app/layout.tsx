@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { UserProvider } from './UserProvider'
+import { MarkerIO } from '../components/MarkerIO'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -31,6 +32,7 @@ export default function RootLayout({
         <UserProvider>
           {children}
         </UserProvider>
+        <MarkerIO />
       </body>
     </html>
   )
