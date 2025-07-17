@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useFilteredForms, FormFilters } from '@/hooks/useFilteredForms'
+import { useSortableColumn } from '@/hooks/useSortableColumn'
 
 const formsColumns = [
   'Description', 'Site', 'Module', 'Responsible', 'Due'
@@ -13,11 +14,17 @@ export default function FormsPage() {
   const itemsPerPage = 10
   const { forms, loading, error, availableUsers, availableModules, total } = useFilteredForms(filters)
 
-  // Pagination logic
-  const totalPages = Math.ceil(forms.length / itemsPerPage)
+  // Due date sorting
+  const dueDateSort = useSortableColumn(
+    forms,
+    (form) => form.settings?.due_date
+  )
+
+  // Pagination logic - use sorted data
+  const totalPages = Math.ceil(dueDateSort.sortedData.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedForms = forms.slice(startIndex, endIndex)
+  const paginatedForms = dueDateSort.sortedData.slice(startIndex, endIndex)
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -138,9 +145,25 @@ export default function FormsPage() {
             <table className="min-w-full text-sm font-inter">
               <thead>
                 <tr className="bg-[#F2F2F2]">
-                  {formsColumns.map((col) => (
-                    <th key={col} className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">{col}</th>
-                  ))}
+                  {formsColumns.map((col) => {
+                    if (col === 'Due') {
+                      return (
+                        <th 
+                          key={col} 
+                          {...dueDateSort.getSortableHeaderProps()}
+                          className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600 cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{col}</span>
+                            {dueDateSort.renderSortIcon()}
+                          </div>
+                        </th>
+                      )
+                    }
+                    return (
+                      <th key={col} className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">{col}</th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>

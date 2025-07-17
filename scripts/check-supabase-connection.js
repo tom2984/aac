@@ -8,9 +8,9 @@ async function checkSupabaseConnection() {
   console.log('📋 Environment Variables:')
   console.log(`NEXT_PUBLIC_SUPABASE_URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Not set'}`)
   console.log(`NEXT_PUBLIC_SUPABASE_ANON_KEY: ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Set' : '❌ Not set'}`)
-  console.log(`SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ Not set'}\n`)
-  
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log(`SUPABASE_SERVICE_KEY: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Set' : '❌ Not set'}\n`)
+
+if (!process.env.SUPABASE_SERVICE_KEY) {
     console.log('⚠️  SERVICE ROLE KEY MISSING!')
     console.log('This is needed to bypass Row Level Security (RLS) policies.\n')
     
@@ -19,7 +19,7 @@ async function checkSupabaseConnection() {
     console.log('2. Navigate to Settings > API')
     console.log('3. Copy the "service_role" key (not the anon key)')
     console.log('4. Add this line to your .env.local file:')
-    console.log('   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here')
+    console.log('   SUPABASE_SERVICE_KEY=your-service-role-key-here')
     console.log('5. Run this script again\n')
     return
   }
@@ -32,7 +32,7 @@ async function checkSupabaseConnection() {
   
   const serviceClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_SERVICE_KEY
   )
   
   try {

@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase'
 import { useUser } from '@/app/UserProvider'
 import { useFilteredForms } from '@/hooks/useFilteredForms'
 import FilterDrawer, { FilterOption } from '@/components/FilterDrawer'
+import { formatUserDisplayName, formatUsersListDisplay } from '@/lib/userUtils'
+import { formatDateUK } from '@/lib/dateUtils'
+import { useSortableColumn } from '@/hooks/useSortableColumn'
 
 type User = { id: string; [key: string]: any };
 
@@ -131,11 +134,17 @@ export default function FormsPage() {
   // No need for manual filtering anymore - it's handled by the API
   const filteredForms = forms
 
-  // Pagination logic
-  const totalPages = Math.ceil(forms.length / itemsPerPage)
+  // Due date sorting
+  const dueDateSort = useSortableColumn(
+    forms,
+    (form) => form.settings?.due_date
+  )
+
+  // Pagination logic - use sorted data
+  const totalPages = Math.ceil(dueDateSort.sortedData.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedForms = forms.slice(startIndex, endIndex)
+  const paginatedForms = dueDateSort.sortedData.slice(startIndex, endIndex)
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -622,18 +631,17 @@ export default function FormsPage() {
       // Get full employee objects for the selected employees
       const selectedEmployeeObjects = selectedEmployees.map(employeeId => {
         const employee = availableEmployees.find(e => e.id === employeeId);
-        return employee ? {
-          id: employee.id,
-          name: employee.first_name && employee.last_name 
-            ? `${employee.first_name} ${employee.last_name}`
-            : employee.email,
-          email: employee.email,
-          first_name: employee.first_name,
-          last_name: employee.last_name
+                  return employee ? {
+            id: employee.id,
+            name: formatUserDisplayName(employee),
+            email: employee.email,
+            first_name: employee.first_name,
+            last_name: employee.last_name
         } : null;
       }).filter(Boolean);
 
       let formData: any
+      let formCreatedSuccessfully = false
 
       if (editingFormId) {
         // Update existing form
@@ -660,6 +668,7 @@ export default function FormsPage() {
         }
 
         formData = updatedFormData
+        formCreatedSuccessfully = true
 
         // Delete existing questions
         const { error: deleteError } = await supabase
@@ -700,77 +709,167 @@ export default function FormsPage() {
         }
 
         formData = newFormData
+        formCreatedSuccessfully = true
       }
 
       // Insert questions (same for both create and update)
       let questionErrors = 0
+      console.log(`📝 Starting to create ${questions.length} questions for form:`, formData.id)
+      
       for (let order_index = 0; order_index < questions.length; order_index++) {
         const q = questions[order_index]
-        if (!q.description) continue // Skip empty questions
+        console.log(`Processing question ${order_index + 1}:`, q)
+        
+        if (!q.description || q.description.trim() === '') {
+          console.log(`⏭️ Skipping empty question at index ${order_index}`)
+          continue // Skip empty questions
+        }
         
         let options = (q.type === 'single_select' || q.type === 'multi_select') ? q.options.filter((opt: string) => opt.trim()) : []
-        let question_type = q.type
         
-        const { error: questionError } = await supabase.from('form_questions').insert([
-          {
-            form_id: formData.id,
-            question_text: q.description,
-            question_type,
-            is_required: q.isRequired,
-            order_index,
-            options: options.length ? JSON.stringify(options) : '[]',
-            preset_question_id: q.preset_question_id || null,
-            answer_format: q.answer_format || 'text',
-            sub_questions: q.sub_questions && q.sub_questions.length > 0 ? JSON.stringify(q.sub_questions) : '[]',
-          },
-        ])
+        // Use question type directly - database enum matches frontend types
+        const question_type = q.type
+        
+        // Validate question type - must match database enum exactly
+        const validTypes = ['short_text', 'long_text', 'single_select', 'multi_select', 'composite']
+        if (!question_type || !validTypes.includes(question_type)) {
+          console.error(`❌ Invalid question type: "${q.type}". Valid types:`, validTypes)
+          console.error(`❌ Question will be skipped:`, q)
+          questionErrors++
+          continue
+        }
+        
+        console.log(`✅ Question type: "${question_type}" (valid)`)
+        
+        // Ensure question text is not too long (database limit)
+        const questionText = q.description.trim()
+        if (questionText.length > 1000) {
+          console.error(`❌ Question text too long (${questionText.length} chars, max 1000):`, questionText.substring(0, 100) + '...')
+          questionErrors++
+          continue
+        }
+        
+        // Validate form_id exists
+        if (!formData.id) {
+          console.error(`❌ Missing form_id for question:`, q)
+          questionErrors++
+          continue
+        }
+        
+        const questionData = {
+          form_id: formData.id,
+          question_text: questionText,
+          question_type,
+          is_required: Boolean(q.isRequired),
+          order_index,
+          options: options.length ? JSON.stringify(options) : '[]',
+          preset_question_id: q.preset_question_id || null,
+          answer_format: q.answer_format || 'text',
+          sub_questions: q.sub_questions && q.sub_questions.length > 0 ? JSON.stringify(q.sub_questions) : '[]',
+        }
+        
+        console.log(`📤 Inserting question data:`, questionData)
+        
+        const { data: questionResult, error: questionError } = await supabase
+          .from('form_questions')
+          .insert([questionData])
+          .select()
         
         if (questionError) {
-          console.error('Error creating question:', questionError)
+          console.error(`❌ ERROR: Failed to create question ${order_index + 1}`)
+          console.error('Error details:', questionError)
+          console.error('Question data attempted:', questionData)
+          console.error('Error code:', questionError.code)
+          console.error('Error message:', questionError.message)
           questionErrors++
+        } else {
+          console.log(`✅ Successfully created question ${order_index + 1}:`, questionResult)
+        }
+      }
+      
+      console.log(`📊 Question creation summary: ${questions.length - questionErrors} successful, ${questionErrors} failed`)
+
+      // Create form assignments in the form_assignments table
+      let assignmentError = null
+      if (selectedEmployees.length > 0) {
+        // If editing, first delete existing assignments
+        if (editingFormId) {
+          const { error: deleteAssignmentError } = await supabase
+            .from('form_assignments')
+            .delete()
+            .eq('form_id', editingFormId)
+
+          if (deleteAssignmentError) {
+            console.error('Error deleting old assignments:', deleteAssignmentError)
+          }
+        }
+
+        // Create new assignments
+        const assignments = selectedEmployees.map(employeeId => ({
+          form_id: formData.id,
+          employee_id: employeeId,
+          assigned_by: user.id,
+          status: 'pending',
+          due_date: dueDate || null,
+          assigned_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }))
+
+        console.log('Attempting to create assignments:', assignments)
+        
+        const { data: assignmentData, error: insertAssignmentError } = await supabase
+          .from('form_assignments')
+          .insert(assignments)
+          .select()
+
+        if (insertAssignmentError) {
+          console.error('❌ ERROR: Failed to create form assignments')
+          console.error('Error details:', insertAssignmentError)
+          console.error('Assignment data attempted:', assignments)
+          console.error('Error code:', insertAssignmentError.code)
+          console.error('Error message:', insertAssignmentError.message)
+          
+          // Check if it's an RLS policy error
+          if (insertAssignmentError.code === 'PGRST301' || insertAssignmentError.message?.includes('row-level security')) {
+            console.error('🚨 This appears to be an RLS (Row Level Security) policy error')
+            console.error('The database is rejecting the assignment creation due to permission policies')
+          }
+          
+          assignmentError = insertAssignmentError
+        } else {
+          console.log(`✅ Successfully created ${assignmentData?.length || 0} form assignments`)
+          console.log('Assignment data:', assignmentData)
         }
       }
 
-      // Note: form_assignments table doesn't exist yet, assignments are stored in metadata
-      // TODO: Once form_assignments table is created, uncomment this code
-      /*
-      const assignments = selectedEmployees.map(employeeId => ({
-        form_id: formData.id,
-        employee_id: employeeId,
-        assigned_by: user.id,
-        status: 'pending' as const,
-        due_date: dueDate || null,
-      }))
-
-      const { error: assignmentError } = await supabase
-        .from('form_assignments')
-        .insert(assignments)
-
+      // Show appropriate success/error message
       if (assignmentError) {
-        console.error('Error creating assignments:', assignmentError)
+        const isRLSError = assignmentError.code === 'PGRST301' || assignmentError.message?.includes('row-level security')
+        const errorType = isRLSError ? 'permission/security policy' : 'database'
+        
         if (editingFormId) {
-          alert('Form updated but there was an error updating employee assignments: ' + assignmentError.message)
+          alert(`❌ Form updated but failed to update employee assignments due to ${errorType} error:\n\n${assignmentError.message}\n\nThe form exists but assignments were not created.`)
         } else {
-          alert('Form created but there was an error assigning it to employees: ' + assignmentError.message)
+          alert(`⚠️ Form created but failed to assign to employees due to ${errorType} error:\n\n${assignmentError.message}\n\nForm ID: ${formData.id}\nThe form exists but assignments were not created.`)
+        }
+        
+        if (isRLSError) {
+          console.error('🔧 SOLUTION: This is likely an RLS policy issue. The form_assignments table policies may be too restrictive.')
         }
       } else {
+        // Show success message only if no assignment errors
         if (editingFormId) {
-          alert('Form updated successfully!')
+          alert('✅ Form updated successfully!')
         } else {
-          alert(`Form created successfully and assigned to ${selectedEmployees.length} employee(s)!`)
+          alert(`✅ Form created successfully and assigned to ${selectedEmployees.length} employee(s)!`)
         }
-      }
-      */
-
-      // For now, just show success message
-      if (editingFormId) {
-        alert('Form updated successfully!')
-      } else {
-        alert(`Form created successfully and assigned to ${selectedEmployees.length} employee(s)!`)
       }
 
       if (questionErrors > 0) {
-        alert(`Warning: ${questionErrors} question(s) failed to save`)
+        console.error(`🚨 FINAL RESULT: ${questionErrors} out of ${questions.length} questions failed to save`)
+        alert(`⚠️ Warning: ${questionErrors} out of ${questions.length} question(s) failed to save!\n\nCheck the browser console for detailed error information.\n\nCommon issues:\n• Invalid question types\n• Empty question text\n• Database permission errors`)
+      } else {
+        console.log(`✅ All ${questions.length} questions saved successfully!`)
       }
 
       // Reset form and return to table view
@@ -1034,7 +1133,15 @@ export default function FormsPage() {
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Title</th>
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Description</th>
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Module</th>
-                  <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Due Date</th>
+                  <th 
+                    {...dueDateSort.getSortableHeaderProps()}
+                    className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600 cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span>Due Date</span>
+                      {dueDateSort.renderSortIcon()}
+                    </div>
+                  </th>
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Users</th>
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Questions</th>
                   <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Actions</th>
@@ -1065,10 +1172,10 @@ export default function FormsPage() {
                     <td className="px-3 py-4 sm:px-4 sm:py-2 text-gray-700">{form.settings?.due_date || '-'}</td>
                     <td className="px-3 py-4 sm:px-4 sm:py-2 text-gray-700">
                       {(() => {
-                        // Check if we have user objects in metadata
-                        if (Array.isArray(form.metadata?.users) && form.metadata.users.length > 0) {
-                          return form.metadata.users.map((u: any) => u.name || u.email).join(', ')
-                        }
+                                                 // Check if we have user objects in metadata
+                         if (Array.isArray(form.metadata?.users) && form.metadata.users.length > 0) {
+                           return formatUsersListDisplay(form.metadata.users)
+                         }
                         // Fallback to assigned_employees count if available
                         if (form.metadata?.assigned_employee_count) {
                           return `${form.metadata.assigned_employee_count} employee${form.metadata.assigned_employee_count !== 1 ? 's' : ''}`
@@ -1259,15 +1366,13 @@ export default function FormsPage() {
                           <tr key={index} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {item.user?.first_name && item.user?.last_name
-                                      ? `${item.user.first_name} ${item.user.last_name}`
-                                      : item.user?.email || 'Unknown User'}
-                                  </div>
-                                  {item.user?.first_name && item.user?.last_name && (
-                                    <div className="text-sm text-gray-500">{item.user.email}</div>
-                                  )}
+                                                                   <div>
+                                     <div className="text-sm font-medium text-gray-900">
+                                       {formatUserDisplayName(item.user)}
+                                     </div>
+                                     {item.user?.first_name && item.user?.last_name && item.user?.email && (
+                                       <div className="text-sm text-gray-500">{item.user.email}</div>
+                                     )}
                                 </div>
                               </div>
                             </td>
@@ -1280,11 +1385,11 @@ export default function FormsPage() {
                                 {item.response ? 'Completed' : 'Pending'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {item.response?.submitted_at 
-                                ? new Date(item.response.submitted_at).toLocaleDateString()
-                                : '-'}
-                            </td>
+                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                               {item.response?.submitted_at 
+                                 ? formatDateUK(item.response.submitted_at)
+                                 : '-'}
+                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               {item.response && (
                                 <button
@@ -1345,23 +1450,21 @@ export default function FormsPage() {
                  {/* User Info Card */}
                  <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200 mb-6">
                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                     <div className="min-w-0 flex-1">
-                       <h3 className="text-base sm:text-lg font-semibold font-inter text-gray-900 truncate">
-                         {viewingAnswersUser?.first_name && viewingAnswersUser?.last_name
-                           ? `${viewingAnswersUser.first_name} ${viewingAnswersUser.last_name}`
-                           : viewingAnswersUser?.email || 'Unknown User'}
-                       </h3>
-                       {viewingAnswersUser?.first_name && viewingAnswersUser?.last_name && (
-                         <p className="text-sm text-gray-600 font-inter truncate">{viewingAnswersUser.email}</p>
-                       )}
+                                            <div className="min-w-0 flex-1">
+                         <h3 className="text-base sm:text-lg font-semibold font-inter text-gray-900 truncate">
+                           {formatUserDisplayName(viewingAnswersUser)}
+                         </h3>
+                         {viewingAnswersUser?.first_name && viewingAnswersUser?.last_name && viewingAnswersUser?.email && (
+                           <p className="text-sm text-gray-600 font-inter truncate">{viewingAnswersUser.email}</p>
+                         )}
                      </div>
                      <div className="text-left sm:text-right flex-shrink-0">
                        <div className="text-sm font-medium text-green-600">Completed</div>
-                       <div className="text-xs text-gray-500">
-                         {viewingAnswersResponse?.submitted_at 
-                           ? new Date(viewingAnswersResponse.submitted_at).toLocaleDateString()
-                           : '-'}
-                       </div>
+                                                <div className="text-xs text-gray-500">
+                           {viewingAnswersResponse?.submitted_at 
+                             ? formatDateUK(viewingAnswersResponse.submitted_at)
+                             : '-'}
+                         </div>
                      </div>
                    </div>
                  </div>
@@ -1515,11 +1618,9 @@ export default function FormsPage() {
                     {selectedEmployees.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {selectedEmployees.map(employeeId => {
-                          const employee = availableEmployees.find(e => e.id === employeeId);
-                          if (!employee) return null;
-                          const displayName = employee.first_name && employee.last_name 
-                            ? `${employee.first_name} ${employee.last_name}`
-                            : employee.email;
+                                                      const employee = availableEmployees.find(e => e.id === employeeId);
+                            if (!employee) return null;
+                            const displayName = formatUserDisplayName(employee);
                           return (
                             <span key={employeeId} className="inline-flex items-center gap-2 px-3 py-1 bg-[#FF6551] text-white text-sm rounded-full">
                               {displayName}
@@ -1544,11 +1645,9 @@ export default function FormsPage() {
                         <span className="text-xs text-gray-600 font-inter font-medium">Available Team Members</span>
                       </div>
                       <div className="max-h-32 overflow-y-auto">
-                        {availableEmployees.map(employee => {
-                          const isSelected = selectedEmployees.includes(employee.id);
-                          const displayName = employee.first_name && employee.last_name 
-                            ? `${employee.first_name} ${employee.last_name}`
-                            : employee.email;
+                                                 {availableEmployees.map(employee => {
+                           const isSelected = selectedEmployees.includes(employee.id);
+                           const displayName = formatUserDisplayName(employee);
                           
                           return (
                             <button

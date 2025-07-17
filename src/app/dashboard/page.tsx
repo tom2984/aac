@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useUser } from '@/app/UserProvider'
 import { useFilteredForms } from '@/hooks/useFilteredForms'
 import FilterDrawer, { FilterOption } from '@/components/FilterDrawer'
+import { useSortableColumn } from '@/hooks/useSortableColumn'
 
 const stats = [
   { label: 'Audit', value: '12', delta: '+7%' },
@@ -63,11 +64,17 @@ export default function DashboardPage() {
     adminId: user?.id
   })
 
-  // Pagination logic
-  const totalPages = Math.ceil(forms.length / itemsPerPage)
+  // Due date sorting
+  const dueDateSort = useSortableColumn(
+    forms,
+    (form) => form.settings?.due_date
+  )
+
+  // Pagination logic - use sorted data
+  const totalPages = Math.ceil(dueDateSort.sortedData.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedForms = forms.slice(startIndex, endIndex)
+  const paginatedForms = dueDateSort.sortedData.slice(startIndex, endIndex)
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -269,7 +276,15 @@ export default function DashboardPage() {
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Title</th>
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Description</th>
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Module</th>
-                    <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Due Date</th>
+                    <th 
+                      {...dueDateSort.getSortableHeaderProps()}
+                      className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600 cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Due Date</span>
+                        {dueDateSort.renderSortIcon()}
+                      </div>
+                    </th>
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Users</th>
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">Questions</th>
                     <th className="px-3 py-3 sm:px-4 sm:py-2 text-left font-medium text-gray-600">View</th>

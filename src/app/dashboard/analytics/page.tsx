@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { useFilteredForms } from '@/hooks/useFilteredForms'
 import { useUser } from '@/app/UserProvider'
 import FilterDrawer, { FilterOption } from '@/components/FilterDrawer'
+import { useSortableColumn } from '@/hooks/useSortableColumn'
 
 const months = [
   '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06',
@@ -732,11 +733,17 @@ export default function AnalyticsPage() {
     
     const totalForms = filteredFocusedForms.length
     
-    // Pagination logic for focused view
-    const focusedTotalPages = Math.ceil(filteredFocusedForms.length / focusedItemsPerPage)
+    // Due date sorting for focused view
+    const dueDateSort = useSortableColumn(
+      filteredFocusedForms,
+      (form) => form.settings?.due_date
+    )
+
+    // Pagination logic for focused view - use sorted data
+    const focusedTotalPages = Math.ceil(dueDateSort.sortedData.length / focusedItemsPerPage)
     const focusedStartIndex = (focusedCurrentPage - 1) * focusedItemsPerPage
     const focusedEndIndex = focusedStartIndex + focusedItemsPerPage
-    const paginatedFocusedForms = filteredFocusedForms.slice(focusedStartIndex, focusedEndIndex)
+    const paginatedFocusedForms = dueDateSort.sortedData.slice(focusedStartIndex, focusedEndIndex)
     
     return (
       <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
@@ -898,8 +905,14 @@ export default function AnalyticsPage() {
                     <th className="px-4 py-3 sm:px-6 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
                       Responsible
                     </th>
-                    <th className="px-4 py-3 sm:px-6 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
-                      Due
+                    <th 
+                      {...dueDateSort.getSortableHeaderProps()}
+                      className="px-4 py-3 sm:px-6 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Due</span>
+                        {dueDateSort.renderSortIcon()}
+                      </div>
                     </th>
                   </tr>
                 </thead>

@@ -12,7 +12,7 @@ function getSupabaseClients() {
   }
   
   if (!serviceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+    throw new Error('Missing SUPABASE_SERVICE_KEY environment variable')
   }
   
   // Regular client for auth
