@@ -160,6 +160,12 @@ export default function AnalyticsPage() {
     adminId: user?.id
   })
   
+  // Due date sorting hook for focused forms (moved to top level to fix infinite re-render issue)
+  const dueDateSort = useSortableColumn(
+    focusedForms,
+    (form) => form.settings?.due_date
+  )
+  
   const [sidebarData, setSidebarData] = useState<any>(null)
   const [sidebarLoading, setSidebarLoading] = useState(false)
   const [sidebarError, setSidebarError] = useState<string | null>(null)
@@ -733,17 +739,16 @@ export default function AnalyticsPage() {
     
     const totalForms = filteredFocusedForms.length
     
-    // Due date sorting for focused view
-    const dueDateSort = useSortableColumn(
-      filteredFocusedForms,
-      (form) => form.settings?.due_date
+    // Use the properly sorted data from the top-level hook
+    const sortedFilteredForms = dueDateSort.sortedData.filter((form: any) => 
+      filteredFocusedForms.some((filtered: any) => filtered.id === form.id)
     )
 
     // Pagination logic for focused view - use sorted data
-    const focusedTotalPages = Math.ceil(dueDateSort.sortedData.length / focusedItemsPerPage)
+    const focusedTotalPages = Math.ceil(sortedFilteredForms.length / focusedItemsPerPage)
     const focusedStartIndex = (focusedCurrentPage - 1) * focusedItemsPerPage
     const focusedEndIndex = focusedStartIndex + focusedItemsPerPage
-    const paginatedFocusedForms = dueDateSort.sortedData.slice(focusedStartIndex, focusedEndIndex)
+    const paginatedFocusedForms = sortedFilteredForms.slice(focusedStartIndex, focusedEndIndex)
     
     return (
       <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
