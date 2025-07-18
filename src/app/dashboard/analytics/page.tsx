@@ -191,13 +191,17 @@ export default function AnalyticsPage() {
   // Dynamic forms stats state
   const [formsStats, setFormsStats] = useState<any[]>([])
   const [formsStatsLoading, setFormsStatsLoading] = useState(true)
+  
+  // State for filtered focused forms
+  const [filteredFocusedForms, setFilteredFocusedForms] = useState<any[]>([])
+  const [focusedFormsFiltering, setFocusedFormsFiltering] = useState(false)
 
   // Optimized: Fetch all forms, questions, responses, and answers in one go
   useEffect(() => {
     const fetchAllData = async () => {
       setDaysLostLoading(true)
       try {
-        const { data: analyticsData } = await supabaseAPI.getAnalyticsDaysLost()
+        const { data: analyticsData } = await supabaseAPI.getAnalyticsDaysLost(daysLostUserFilter)
         if (!analyticsData) return setDaysLostLoading(false)
         
         const { forms: formsData, questions: questionsData, responses: responsesData, answers: answersData } = analyticsData
@@ -270,12 +274,7 @@ export default function AnalyticsPage() {
           // Apply filters to see if this month should be included
           let includeMonth = true
           
-          // Apply user filter
-          if (daysLostUserFilter !== 'All') {
-            const formUsers = form.metadata?.users || []
-            const hasUser = formUsers.some((u: any) => u.id === daysLostUserFilter)
-            if (!hasUser) includeMonth = false
-          }
+          // Note: User filter is now handled by the API, so we don't need to filter here
           
           // Apply module filter
           if (daysLostModuleFilter !== 'All') {
@@ -315,12 +314,7 @@ export default function AnalyticsPage() {
               const form = formMap.current[question.form_id]
               if (!form) continue
               
-              // Apply user filter if set
-              if (daysLostUserFilter !== 'All') {
-                const formUsers = form.metadata?.users || []
-                const hasUser = formUsers.some((u: any) => u.id === daysLostUserFilter)
-                if (!hasUser) continue
-              }
+              // Note: User filter is now handled by the API, so we don't need to filter here
               
               // Apply module filter if set
               if (daysLostModuleFilter !== 'All') {
@@ -510,6 +504,38 @@ export default function AnalyticsPage() {
   useEffect(() => {
     setDaysLostData(allDaysLostData)
   }, [allDaysLostData])
+
+  // Filter focused forms when focused stat or focusedForms change
+  useEffect(() => {
+    const filterFocusedForms = async () => {
+      if (!focusedStat) {
+        setFilteredFocusedForms([])
+        return
+      }
+
+      setFocusedFormsFiltering(true)
+      
+      const isReasonStat = reasons.some(r => r.key === focusedStat.key)
+      
+      if (isReasonStat) {
+        // For days lost metrics, filter to only show forms that have data for the specific reason
+        const reasonKey = focusedStat.key as 'weather' | 'technical' | 'other'
+        const formsWithReasonData = Array.from(formsByReason.current[reasonKey] || [])
+        const filtered = focusedForms.filter((form: any) => 
+          formsWithReasonData.includes(form.id)
+        )
+        setFilteredFocusedForms(filtered)
+      } else {
+        // For Forms metrics (confirmed, in progress, overdue), filter by status
+        const filtered = await filterFormsByStatus(focusedForms, focusedStat.key)
+        setFilteredFocusedForms(filtered)
+      }
+      
+      setFocusedFormsFiltering(false)
+    }
+
+    filterFocusedForms()
+  }, [focusedStat, focusedForms, formsByReason])
 
   // Helper to get reason key from stat label
   const getReasonKey = (label: string) => {
@@ -716,27 +742,74 @@ export default function AnalyticsPage() {
     return () => window.removeEventListener('keydown', handleEsc)
   }, [])
 
+  // Function to filter forms by their status (confirmed, in progress, overdue)
+  const filterFormsByStatus = async (forms: any[], statusKey: string) => {
+    if (!forms || forms.length === 0) return []
+    
+    try {
+      // Get all form responses to determine status
+      const { data: responses, error: responsesError } = await supabase
+        .from('form_responses')
+        .select('form_id, respondent_id, submitted_at')
+      
+      if (responsesError) {
+        console.error('Error fetching responses for status filtering:', responsesError)
+        return forms // Return all forms if we can't filter
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      const filteredForms: any[] = []
+
+      for (const form of forms) {
+        const formUsers = form.metadata?.users || []
+        const dueDate = form.settings?.due_date
+
+        for (const formUser of formUsers) {
+          const userResponse = responses?.find((r: any) => 
+            r.form_id === form.id && r.respondent_id === formUser.id
+          )
+
+          let shouldInclude = false
+
+          if (statusKey === 'confirmed') {
+            // Completed on time (submitted before or on due date)
+            if (userResponse && dueDate && userResponse.submitted_at) {
+              const submittedDate = userResponse.submitted_at.split('T')[0]
+              if (submittedDate <= dueDate) {
+                shouldInclude = true
+              }
+            }
+          } else if (statusKey === 'in_progress') {
+            // Currently pending (no response and not overdue yet)
+            if (!userResponse && dueDate && dueDate >= today) {
+              shouldInclude = true
+            }
+          } else if (statusKey === 'overdue') {
+            // Overdue (no response and past due date)
+            if (!userResponse && dueDate && dueDate < today) {
+              shouldInclude = true
+            }
+          }
+
+          // Add form once per matching status (avoid duplicates)
+          if (shouldInclude && !filteredForms.some(f => f.id === form.id)) {
+            filteredForms.push(form)
+            break // Stop checking other users for this form
+          }
+        }
+      }
+
+      return filteredForms
+    } catch (error) {
+      console.error('Error in filterFormsByStatus:', error)
+      return forms // Return all forms if filtering fails
+    }
+  }
+
   const renderFocusedView = () => {
     if (!focusedStat) return null
     
-    const isReasonStat = reasons.some(r => r.key === focusedStat.key)
-    
-    // Filter forms based on the focused stat
-    let filteredFocusedForms = focusedForms
-    
-    if (isReasonStat) {
-      // For days lost metrics, filter to only show forms that have data for the specific reason
-      const reasonKey = focusedStat.key as 'weather' | 'technical' | 'other'
-      const formsWithReasonData = Array.from(formsByReason.current[reasonKey] || [])
-      filteredFocusedForms = focusedForms.filter((form: any) => 
-        formsWithReasonData.includes(form.id)
-      )
-    } else {
-      // For Forms metrics (confirmed, in progress, overdue), show all forms
-      // The filtering happens during calculation, not display
-      filteredFocusedForms = focusedForms
-    }
-    
+    // Use the filtered forms from state (handled by useEffect)
     const totalForms = filteredFocusedForms.length
     
     // Use the properly sorted data from the top-level hook
@@ -922,12 +995,12 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {focusedFormsLoading ? (
+                  {focusedFormsLoading || focusedFormsFiltering ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-6 sm:px-6 sm:py-8 text-center text-gray-500">
                         <div className="flex items-center justify-center">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF6551] mr-3"></div>
-                          Loading forms...
+                          {focusedFormsFiltering ? 'Filtering forms...' : 'Loading forms...'}
                         </div>
                       </td>
                     </tr>

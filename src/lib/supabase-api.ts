@@ -1,6 +1,8 @@
 // Client-side API wrapper that proxies Supabase operations through API routes
 // This solves the client-side timeout issue by using the working server-side connection
 
+import { supabase } from './supabase'
+
 export class SupabaseAPIClient {
   private baseUrl: string
 
@@ -8,13 +10,23 @@ export class SupabaseAPIClient {
     this.baseUrl = baseUrl
   }
 
-  // Generic API call helper
-  private async apiCall(endpoint: string, options: RequestInit = {}) {
+  // Generic API call helper with optional authentication
+  private async apiCall(endpoint: string, options: RequestInit = {}, requireAuth: boolean = false) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...options.headers as Record<string, string>
+    }
+
+    // Add authentication headers if required
+    if (requireAuth) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+    }
+
     const response = await fetch(`${this.baseUrl}/api${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      },
+      headers,
       ...options
     })
 
@@ -64,10 +76,10 @@ export class SupabaseAPIClient {
     })
   }
 
-  async updateProfile(id: string, updates: any) {
+  async updateProfile(id: string, profileData: any) {
     return this.apiCall(`/profiles/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(updates)
+      body: JSON.stringify(profileData)
     })
   }
 
@@ -87,8 +99,14 @@ export class SupabaseAPIClient {
   }
 
   // Analytics methods
-  async getAnalyticsDaysLost() {
-    return this.apiCall('/analytics/days-lost')
+  async getAnalyticsDaysLost(userFilter?: string) {
+    const params = new URLSearchParams()
+    if (userFilter && userFilter !== 'All') {
+      params.append('user_filter', userFilter)
+    }
+    
+    const endpoint = `/analytics/days-lost${params.toString() ? `?${params.toString()}` : ''}`
+    return this.apiCall(endpoint, {}, true) // Require authentication
   }
 
   // Preset questions methods
@@ -96,10 +114,10 @@ export class SupabaseAPIClient {
     return this.apiCall(`/preset-questions?admin_id=${adminId}`)
   }
 
-  async createPresetQuestion(presetData: any) {
+  async createPresetQuestion(questionData: any) {
     return this.apiCall('/preset-questions', {
       method: 'POST',
-      body: JSON.stringify(presetData)
+      body: JSON.stringify(questionData)
     })
   }
 

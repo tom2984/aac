@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export type FormFilters = {
   module?: string
@@ -49,6 +50,17 @@ export const useFilteredForms = (filters: FormFilters = {}): UseFilteredFormsRes
       setLoading(true)
       setError(null)
 
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setError('Not authenticated')
+        setForms([])
+        setAvailableUsers([])
+        setAvailableModules([])
+        setTotal(0)
+        return
+      }
+
       // Build query parameters
       const params = new URLSearchParams()
       
@@ -59,7 +71,12 @@ export const useFilteredForms = (filters: FormFilters = {}): UseFilteredFormsRes
       if (filters.search) params.append('search', filters.search)
       if (filters.adminId) params.append('admin_id', filters.adminId)
 
-      const response = await fetch(`/api/forms?${params.toString()}`)
+      const response = await fetch(`/api/forms?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      })
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

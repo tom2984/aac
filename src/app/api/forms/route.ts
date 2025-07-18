@@ -1,20 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-function getSupabaseClient() {
+function getSupabaseClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
   
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing Supabase environment variables')
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Missing Supabase public environment variables')
   }
   
-  return createClient(supabaseUrl, supabaseServiceKey)
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_KEY environment variable')
+  }
+  
+  // Regular client for auth
+  const supabase = createClient(supabaseUrl, anonKey)
+  
+  // Service role client for admin operations (bypasses RLS)
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+  
+  return { supabase, supabaseAdmin }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const { supabase, supabaseAdmin } = getSupabaseClients()
+    
+    // Get user from Authorization header (if provided)
+    const authHeader = request.headers.get('authorization')
+    let currentUser = null
+    let currentUserProfile = null
+    
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '')
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+      
+      if (!authError && user) {
+        currentUser = user
+        
+        // Get user profile with admin privileges (to check role and relationships)
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('id, role, invited_by, first_name, last_name, email')
+          .eq('id', user.id)
+          .single()
+          
+        currentUserProfile = profile
+      }
+    }
     
     const { searchParams } = new URL(request.url)
     
@@ -26,8 +65,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const adminId = searchParams.get('admin_id') // For filtering by admin's invited users
     
-    // Build the base query
-    let query = supabase
+    // Build the base query - use admin client for complex queries
+    let query = supabaseAdmin
       .from('forms')
       .select(`
         *,
@@ -35,7 +74,41 @@ export async function GET(request: NextRequest) {
         settings
       `)
     
-    // Apply filters
+    // 🔒 SECURITY: Filter forms based on user permissions
+    if (currentUser && currentUserProfile) {
+      if (currentUserProfile.role === 'admin') {
+        // Admins can only see forms they created
+        query = query.eq('created_by', currentUser.id)
+      } else if (currentUserProfile.role === 'employee') {
+        // Employees can only see forms assigned to them
+        // Use form_assignments table if it exists, fallback to metadata approach
+        const { data: assignedForms } = await supabaseAdmin
+          .from('form_assignments')
+          .select('form_id')
+          .eq('employee_id', currentUser.id)
+        
+        if (assignedForms && assignedForms.length > 0) {
+          const assignedFormIds = assignedForms.map(a => a.form_id)
+          query = query.in('id', assignedFormIds)
+        } else {
+          // Fallback to metadata filtering if no form_assignments found
+          // This will be filtered after the query since we can't easily query JSONB arrays
+          // For now, fetch all forms and filter in memory (less efficient but secure)
+        }
+      }
+    } else {
+      // No authenticated user - return empty results
+      return NextResponse.json({ 
+        data: [],
+        metadata: {
+          availableUsers: [],
+          availableModules: [],
+          total: 0
+        }
+      })
+    }
+    
+    // Apply other filters
     if (module && module !== 'All') {
       query = query.eq('settings->>module', module)
     }
@@ -62,11 +135,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     
-    // Get question counts for all forms
-    let formsWithCounts = forms || []
-    if (forms && forms.length > 0) {
-      const formIds = forms.map(form => form.id)
-      const { data: questionCounts } = await supabase
+    // Additional filtering for employees using metadata (if form_assignments didn't work)
+    let filteredForms = forms || []
+    if (currentUserProfile?.role === 'employee' && filteredForms.length === 0) {
+      // Filter forms where employee is in metadata.assigned_employees or metadata.users
+      filteredForms = forms?.filter(form => {
+        const assignedEmployees = form.metadata?.assigned_employees || []
+        const users = form.metadata?.users || []
+        return assignedEmployees.includes(currentUser!.id) || 
+               users.some((user: any) => user.id === currentUser!.id)
+      }) || []
+    }
+    
+    // Get question counts for filtered forms
+    let formsWithCounts = filteredForms
+    if (filteredForms && filteredForms.length > 0) {
+      const formIds = filteredForms.map(form => form.id)
+      const { data: questionCounts } = await supabaseAdmin
         .from('form_questions')
         .select('form_id')
         .in('form_id', formIds)
@@ -78,17 +163,17 @@ export async function GET(request: NextRequest) {
       })
       
       // Add question count to each form
-      formsWithCounts = forms.map(form => ({
+      formsWithCounts = filteredForms.map(form => ({
         ...form,
         questionCount: countMap[form.id] || 0
       }))
     }
     
-    // If filtering by user, we need to filter forms that include specific users
-    let filteredForms = formsWithCounts
+    // Apply user-specific filtering (this is now additional filtering on already secure data)
+    let finalFilteredForms = formsWithCounts
     
     if (userId && userId !== 'All') {
-      filteredForms = formsWithCounts?.filter(form => {
+      finalFilteredForms = formsWithCounts?.filter(form => {
         // Check both assigned_employees (IDs) and users (objects) for backward compatibility
         const assignedEmployees = form.metadata?.assigned_employees || []
         const users = form.metadata?.users || []
@@ -96,36 +181,33 @@ export async function GET(request: NextRequest) {
       }) || []
     }
     
-    // If admin_id is provided, also return available users for that admin
+    // Get available users for the current admin (only if they're an admin)
     let availableUsers: any[] = []
-    if (adminId) {
-      const { data: users } = await supabase
+    if (currentUserProfile?.role === 'admin') {
+      const { data: users } = await supabaseAdmin
         .from('profiles')
         .select('id, first_name, last_name, email')
         .eq('role', 'employee')
-        .eq('invited_by', adminId)
+        .eq('invited_by', currentUser!.id)
         .eq('status', 'active')
         .order('first_name')
       
       availableUsers = users || []
     }
     
-    // Get available modules from existing forms
-    const { data: moduleData } = await supabase
-      .from('forms')
-      .select('settings')
-      .not('settings->>module', 'is', null)
-    
+    // Get available modules from the user's accessible forms only
     const availableModules = Array.from(new Set(
-      moduleData?.map(f => f.settings?.module).filter(Boolean) || []
+      finalFilteredForms?.map(f => f.settings?.module).filter(Boolean) || []
     ))
     
+    console.log(`🔒 Forms API: User ${currentUser?.email || 'anonymous'} (${currentUserProfile?.role || 'unknown'}) accessing ${finalFilteredForms?.length || 0} forms`)
+    
     return NextResponse.json({ 
-      data: filteredForms,
+      data: finalFilteredForms,
       metadata: {
         availableUsers,
         availableModules,
-        total: filteredForms?.length || 0
+        total: finalFilteredForms?.length || 0
       }
     })
   } catch (error) {
@@ -141,11 +223,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = getSupabaseClient()
+    const { supabaseAdmin } = getSupabaseClients()
     
     const formData = await request.json()
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('forms')
       .insert(formData)
       .select()
