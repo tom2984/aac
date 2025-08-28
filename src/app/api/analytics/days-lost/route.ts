@@ -36,7 +36,11 @@ function mapAnswerValue(answerObj: any, reasonKey: string): number {
   const keyMappings: Record<string, string[]> = {
     weather: ['weather', 'Weather', 'WEATHER'],
     technical: ['technical', 'Technical', 'Technical problems', 'technical problems', 'TECHNICAL'],
-    other: ['other', 'Other', 'Other reasons', 'other reasons', 'OTHER']
+    other: ['other', 'Other', 'Other reasons', 'other reasons', 'OTHER'],
+    client: ['client', 'Client', 'CLIENT'],
+    materials: ['materials', 'Materials', 'Materials not arriving', 'materials not arriving', 'supplier', 'Supplier', 'MATERIALS'],
+    drying: ['drying', 'Drying', 'Weather drying up', 'weather drying up', 'DRYING'],
+    leaving: ['leaving', 'Leaving', 'Leaving site', 'leaving site', 'LEAVING']
   }
   
   const possibleKeys = keyMappings[reasonKey] || []
@@ -140,9 +144,15 @@ export async function GET(request: NextRequest) {
       formIds.includes(q.form_id) && // Only questions from user's forms
       q.question_text && (
         q.question_text.toLowerCase().includes('days lost') ||
+        q.question_text.toLowerCase().includes('hours lost') ||
         q.question_text.toLowerCase().includes('weather') ||
         q.question_text.toLowerCase().includes('technical') ||
-        q.question_text.toLowerCase().includes('other reasons')
+        q.question_text.toLowerCase().includes('other reasons') ||
+        q.question_text.toLowerCase().includes('client') ||
+        q.question_text.toLowerCase().includes('materials') ||
+        q.question_text.toLowerCase().includes('supplier') ||
+        q.question_text.toLowerCase().includes('drying') ||
+        q.question_text.toLowerCase().includes('leaving site')
       )
     ) || []
 

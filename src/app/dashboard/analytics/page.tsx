@@ -1,7 +1,7 @@
 "use client"
 
 import { AreaChart, Area, ResponsiveContainer, Tooltip, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass } from 'lucide-react'
+import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass, Users, Package, Droplets, LogOut } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { bisector } from 'd3-array'
 import { useForms } from '@/hooks/useForms'
@@ -17,9 +17,13 @@ const months = [
   '2024-07', '2024-08', '2024-09', '2024-10', '2024-11', '2024-12'
 ]
 const reasons = [
-  { key: 'weather', label: 'Days lost due the weather', icon: <CloudSun className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
-  { key: 'technical', label: 'Days lost due the technical problems', icon: <Wrench className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
-  { key: 'other', label: 'Days lost due other reasons', icon: <Info className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'weather', label: 'Hours lost due the weather', icon: <CloudSun className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'technical', label: 'Hours lost due the technical problems', icon: <Wrench className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'other', label: 'Hours lost due other reasons', icon: <Info className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'client', label: 'Hours lost due to client', icon: <Users className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'materials', label: 'Hours lost - materials not arriving (supplier)', icon: <Package className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'drying', label: 'Hours lost due to weather drying up', icon: <Droplets className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
+  { key: 'leaving', label: 'Hours lost due to leaving site', icon: <LogOut className="w-6 h-6 text-[#FF6551]" />, color: '#FF6551' },
 ]
 
 // This will be replaced with dynamic data
@@ -81,7 +85,7 @@ const formsColumns: string[] = [
   'Description', 'Site', 'Module', 'Responsible', 'Due'
 ]
 
-const initialDaysLost = { weather: 0, technical: 0, other: 0 };
+const initialDaysLost = { weather: 0, technical: 0, other: 0, client: 0, materials: 0, drying: 0, leaving: 0 };
 
 export default function AnalyticsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -92,7 +96,7 @@ export default function AnalyticsPage() {
   const userContext = useUser()
   const user = userContext?.user ? { id: userContext.user.id, ...userContext.profile } : null
   
-  // Days Lost filtering state
+  // Hours Lost filtering state
   const [daysLostUserFilter, setDaysLostUserFilter] = useState('All')
   const [daysLostModuleFilter, setDaysLostModuleFilter] = useState('All')
   const [daysLostDateFrom, setDaysLostDateFrom] = useState('')
@@ -121,6 +125,9 @@ export default function AnalyticsPage() {
   useEffect(() => {
     setFocusedCurrentPage(1)
   }, [focusedModuleFilter, focusedPersonFilter, focusedDateFrom, focusedDateTo, focusedSearchTerm])
+  
+  // State for showing more hours lost graphs
+  const [showMoreHoursLost, setShowMoreHoursLost] = useState(false)
   
   // Filter drawer states
   const [daysLostFilterDrawerOpen, setDaysLostFilterDrawerOpen] = useState(false)
@@ -182,11 +189,11 @@ export default function AnalyticsPage() {
     const d = new Date();
     return d.toISOString().slice(0, 10); // Current month
   });
-  const [allDaysLostData, setAllDaysLostData] = useState<Record<string, any[]>>({ weather: [], technical: [], other: [] })
+  const [allDaysLostData, setAllDaysLostData] = useState<Record<string, any[]>>({ weather: [], technical: [], other: [], client: [], materials: [], drying: [], leaving: [] })
   const [daysLost, setDaysLost] = useState(initialDaysLost);
-  const [sidebarFormsData, setSidebarFormsData] = useState<Record<string, Record<string, Record<string, number>>>>({ weather: {}, technical: {}, other: {} })
+  const [sidebarFormsData, setSidebarFormsData] = useState<Record<string, Record<string, Record<string, number>>>>({ weather: {}, technical: {}, other: {}, client: {}, materials: {}, drying: {}, leaving: {} })
   const formMap = useRef<Record<string, any>>({})
-  const formsByReason = useRef<Record<string, Set<string>>>({ weather: new Set(), technical: new Set(), other: new Set() })
+  const formsByReason = useRef<Record<string, Set<string>>>({ weather: new Set(), technical: new Set(), other: new Set(), client: new Set(), materials: new Set(), drying: new Set(), leaving: new Set() })
   
   // Dynamic forms stats state
   const [formsStats, setFormsStats] = useState<any[]>([])
@@ -226,8 +233,8 @@ export default function AnalyticsPage() {
         const allModules = Array.from(new Set(formsData.map((f: any) => f.settings?.module).filter(Boolean))) as string[]
         setDaysLostAvailableModules(allModules)
 
-        const result: Record<string, any[]> = { weather: [], technical: [], other: [] }
-        const byReasonMonthForm: Record<string, Record<string, Record<string, number>>> = { weather: {}, technical: {}, other: {} }
+        const result: Record<string, any[]> = { weather: [], technical: [], other: [], client: [], materials: [], drying: [], leaving: [] }
+        const byReasonMonthForm: Record<string, Record<string, Record<string, number>>> = { weather: {}, technical: {}, other: {}, client: {}, materials: {}, drying: {}, leaving: {} }
         
         // Determine date range based on filters (same logic as Forms)
         let startDate: Date, endDate: Date
@@ -242,71 +249,133 @@ export default function AnalyticsPage() {
           endDate = new Date()
         }
         
-        // Generate months within the date range
+        // Calculate time granularity based on date range
+        const daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        let granularity: 'day' | 'week' | 'month' = 'month'
+        
+        if (daysDifference <= 31) {
+          granularity = 'day'
+        } else if (daysDifference <= 90) {
+          granularity = 'week'
+        } else {
+          granularity = 'month'
+        }
+        
+        // Helper function to get period identifier from date
+        const getPeriodFromDate = (dateStr: string): string => {
+          const date = new Date(dateStr)
+          if (granularity === 'day') {
+            return dateStr.slice(0, 10) // YYYY-MM-DD
+          } else if (granularity === 'week') {
+            // Get start of week (Sunday)
+            const startOfWeek = new Date(date)
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+            return startOfWeek.toISOString().slice(0, 10)
+          } else {
+            return dateStr.slice(0, 7) // YYYY-MM
+          }
+        }
+        
+        // Generate time periods within the date range based on granularity
         const months: { month: string; name: string }[] = []
         const currentDate = new Date(startDate)
-        currentDate.setDate(1) // Start from first day of month
         
-        while (currentDate <= endDate) {
-          months.push({
-            month: currentDate.toISOString().slice(0, 7),
-            name: currentDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' })
-          })
-          currentDate.setMonth(currentDate.getMonth() + 1)
+        if (granularity === 'day') {
+          // Generate daily periods
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 10) // YYYY-MM-DD
+            const displayName = currentDate.toLocaleDateString('en-GB', { 
+              day: '2-digit', 
+              month: 'short' 
+            })
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+        } else if (granularity === 'week') {
+          // Generate weekly periods (start of each week)
+          currentDate.setDate(currentDate.getDate() - currentDate.getDay()) // Start from Sunday
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 10) // Use start of week as identifier
+            const displayName = `${currentDate.getDate()} ${currentDate.toLocaleDateString('en-GB', { month: 'short' })}`
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setDate(currentDate.getDate() + 7)
+          }
+        } else {
+          // Generate monthly periods (existing logic)
+          currentDate.setDate(1) // Start from first day of month
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 7) // YYYY-MM
+            const displayName = currentDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' })
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setMonth(currentDate.getMonth() + 1)
+          }
         }
         
         // Reset forms by reason tracking
-        formsByReason.current = { weather: new Set(), technical: new Set(), other: new Set() }
+        formsByReason.current = { weather: new Set(), technical: new Set(), other: new Set(), client: new Set(), materials: new Set(), drying: new Set(), leaving: new Set() }
         
-        // First, find all months that actually have data
-        const monthsWithData = new Set<string>()
+        // First, find all periods that actually have data
+        const periodsWithData = new Set<string>()
         for (const answer of answersData) {
           const response = responseMap[answer.response_id]
           if (!response || !response.submitted_at) continue
           
-          const monthStr = response.submitted_at.slice(0, 7)
+          const periodStr = getPeriodFromDate(response.submitted_at)
           const question = questionMap[answer.question_id]
           if (!question) continue
           
           const form = formMap.current[question.form_id]
           if (!form) continue
           
-          // Apply filters to see if this month should be included
-          let includeMonth = true
+          // Apply filters to see if this period should be included
+          let includePeriod = true
           
           // Note: User filter is now handled by the API, so we don't need to filter here
           
           // Apply module filter
           if (daysLostModuleFilter !== 'All') {
             const formModule = form.settings?.module
-            if (formModule !== daysLostModuleFilter) includeMonth = false
+            if (formModule !== daysLostModuleFilter) includePeriod = false
           }
           
           // Apply date filters
-          if (daysLostDateFrom && response.submitted_at.slice(0, 10) < daysLostDateFrom) includeMonth = false
-          if (daysLostDateTo && response.submitted_at.slice(0, 10) > daysLostDateTo) includeMonth = false
+          if (daysLostDateFrom && response.submitted_at.slice(0, 10) < daysLostDateFrom) includePeriod = false
+          if (daysLostDateTo && response.submitted_at.slice(0, 10) > daysLostDateTo) includePeriod = false
           
           // Check if this answer has any data for any reason
           const answerObj = answer.answer || {}
           const hasData = reasons.some(reason => Number(answerObj[reason.key] || 0) > 0)
           
-          if (includeMonth && hasData) {
-            monthsWithData.add(monthStr)
+          if (includePeriod && hasData) {
+            periodsWithData.add(periodStr)
           }
         }
         
-        // Only process months that have data and are within our date range
-        const filteredMonths = months.filter(({ month }) => monthsWithData.has(month))
-        
+        // Process all periods in the selected date range (show 0 for periods without data)
         for (const reason of reasons) {
-          for (const { month: monthStr, name: monthName } of filteredMonths) {
+          for (const { month: periodStr, name: periodName } of months) {
             let total = 0
             let formsCount = 0
             const formTotals: Record<string, number> = {}
             
             for (const answer of answersData) {
               const response = responseMap[answer.response_id]
-              if (!response || response.submitted_at?.slice(0, 7) !== monthStr) continue
+              if (!response || !response.submitted_at) continue
+              
+              const answerPeriod = getPeriodFromDate(response.submitted_at)
+              if (answerPeriod !== periodStr) continue
               
               const question = questionMap[answer.question_id]
               if (!question) continue
@@ -338,16 +407,15 @@ export default function AnalyticsPage() {
             }
             
             formsCount = Object.keys(formTotals).length
-            if (total > 0) {
-              result[reason.key].push({ 
-                month: monthStr, 
-                value: total, 
-                formsCount, 
-                name: monthName
-              })
-            }
-            const reasonKey = reason.key as 'weather' | 'technical' | 'other'
-            byReasonMonthForm[reasonKey][monthStr] = formTotals
+            // Always add the period to show complete date range (even if value is 0)
+            result[reason.key].push({ 
+              month: periodStr, 
+              value: total, 
+              formsCount, 
+              name: periodName
+            })
+            const reasonKey = reason.key as 'weather' | 'technical' | 'other' | 'client' | 'materials' | 'drying' | 'leaving'
+            byReasonMonthForm[reasonKey][periodStr] = formTotals
           }
         }
         
@@ -378,7 +446,7 @@ export default function AnalyticsPage() {
 
         const today = new Date().toISOString().split('T')[0]
         
-        // Determine date range based on filters
+        // Generate date range based on filters
         let startDate: Date, endDate: Date
         if (formsDateFrom || formsDateTo) {
           // Use filtered date range
@@ -391,17 +459,78 @@ export default function AnalyticsPage() {
           endDate = new Date()
         }
         
-        // Generate months within the date range
+        // Calculate time granularity for forms stats based on date range
+        const daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        let formsGranularity: 'day' | 'week' | 'month' = 'month'
+        
+        if (daysDifference <= 31) {
+          formsGranularity = 'day'
+        } else if (daysDifference <= 90) {
+          formsGranularity = 'week'
+        } else {
+          formsGranularity = 'month'
+        }
+        
+        // Helper function for forms period calculation
+        const getFormsPeriodFromDate = (dateStr: string): string => {
+          const date = new Date(dateStr)
+          if (formsGranularity === 'day') {
+            return dateStr.slice(0, 10) // YYYY-MM-DD
+          } else if (formsGranularity === 'week') {
+            // Get start of week (Sunday)
+            const startOfWeek = new Date(date)
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+            return startOfWeek.toISOString().slice(0, 10)
+          } else {
+            return dateStr.slice(0, 7) // YYYY-MM
+          }
+        }
+        
+        // Generate time periods for forms based on granularity
         const months: { month: string; name: string }[] = []
         const currentDate = new Date(startDate)
-        currentDate.setDate(1) // Start from first day of month
         
-        while (currentDate <= endDate) {
-          months.push({
-            month: currentDate.toISOString().slice(0, 7),
-            name: currentDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' })
-          })
-          currentDate.setMonth(currentDate.getMonth() + 1)
+        if (formsGranularity === 'day') {
+          // Generate daily periods
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 10) // YYYY-MM-DD
+            const displayName = currentDate.toLocaleDateString('en-GB', { 
+              day: '2-digit', 
+              month: 'short' 
+            })
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setDate(currentDate.getDate() + 1)
+          }
+        } else if (formsGranularity === 'week') {
+          // Generate weekly periods (start of each week)
+          currentDate.setDate(currentDate.getDate() - currentDate.getDay()) // Start from Sunday
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 10) // Use start of week as identifier
+            const displayName = `${currentDate.getDate()} ${currentDate.toLocaleDateString('en-GB', { month: 'short' })}`
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setDate(currentDate.getDate() + 7)
+          }
+        } else {
+          // Generate monthly periods (existing logic)
+          currentDate.setDate(1) // Start from first day of month
+          while (currentDate <= endDate) {
+            const periodStr = currentDate.toISOString().slice(0, 7) // YYYY-MM
+            const displayName = currentDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' })
+            
+            months.push({
+              month: periodStr,
+              name: displayName
+            })
+            currentDate.setMonth(currentDate.getMonth() + 1)
+          }
         }
 
         const statsData = formsStatsTemplate.map(template => {
@@ -421,9 +550,9 @@ export default function AnalyticsPage() {
               if (formsDateFrom && dueDate && dueDate < formsDateFrom) continue
               if (formsDateTo && dueDate && dueDate > formsDateTo) continue
 
-              // Only count forms created/due in this month
-              const formMonth = form.created_at?.slice(0, 7) || dueDate?.slice(0, 7)
-              if (formMonth !== month) continue
+              // Only count forms created/due in this period
+              const formPeriod = getFormsPeriodFromDate(form.created_at || dueDate || '')
+              if (formPeriod !== month) continue
 
               for (const formUser of formUsers) {
                 const userResponse = responses?.find((r: any) => 
@@ -612,23 +741,48 @@ export default function AnalyticsPage() {
     setDrawerOpen(true)
     
     try {
-      // Create simplified sidebar data from the clicked data point
-      const reasonKey = getReasonKey(stat.label)
-      const monthStr = dataPoint?.month
-      const formTotals = sidebarFormsData?.[reasonKey]?.[monthStr] || {}
-      const formIds = Object.keys(formTotals)
-      
-      const details = formIds.map(formId => {
-        const form = formMap.current[formId]
-        return {
-          description: form?.description || 'Unknown Form',
-          details: `${formTotals[formId]} days lost in ${monthStr}`,
-          form,
-          days: formTotals[formId],
+      // Handle both days lost charts and forms stats charts
+      if (stat.key === 'confirmed' || stat.key === 'in_progress' || stat.key === 'overdue') {
+        // Forms stats chart - show relevant forms based on status AND month
+        const monthStr = dataPoint?.month || dataPoint?.name
+        const actualCount = dataPoint?.value || 0
+        
+        // If count is 0, show no forms
+        if (actualCount === 0) {
+          setSidebarData([])
+          return
         }
-      })
-      
-      setSidebarData(details)
+        
+        // Filter forms by status AND specific month
+        const statusForms = await filterFormsByStatusAndMonth(forms, stat.key, monthStr)
+        
+        const details = statusForms.slice(0, 15).map((form, index) => ({
+          description: form.title || 'Untitled Form',
+          details: `${stat.label} - ${monthStr ? `for ${monthStr}` : 'Current period'} (${index + 1} of ${Math.min(statusForms.length, actualCount)})`,
+          form,
+          value: 1,
+        }))
+        
+        setSidebarData(details)
+      } else {
+        // Days lost chart - existing logic but update to hours
+        const reasonKey = getReasonKey(stat.label)
+        const monthStr = dataPoint?.month
+        const formTotals = sidebarFormsData?.[reasonKey]?.[monthStr] || {}
+        const formIds = Object.keys(formTotals)
+        
+        const details = formIds.map(formId => {
+          const form = formMap.current[formId]
+          return {
+            description: form?.description || 'Unknown Form',
+            details: `${formTotals[formId]} hours lost in ${monthStr}`,
+            form,
+            hours: formTotals[formId],
+          }
+        })
+        
+        setSidebarData(details)
+      }
     } catch (error) {
       setSidebarError('Failed to load forms data')
     } finally {
@@ -636,7 +790,7 @@ export default function AnalyticsPage() {
     }
   }
 
-  // Enhanced tooltip for Days Lost charts
+  // Enhanced tooltip for Hours Lost charts
   const DaysLostTooltip = ({ active, payload, label, stat }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload
@@ -653,15 +807,15 @@ export default function AnalyticsPage() {
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg min-w-[200px]">
           <p className="font-semibold text-gray-900">{label}</p>
           <p className="text-sm text-gray-800 font-medium">
-            {currentValue} days lost ({formsCount} forms)
+            {currentValue} hours lost ({formsCount} forms)
           </p>
           {previousValue > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-100">
               <p className="text-xs text-gray-600">
-                Previous month: {previousValue} days
+                Previous month: {previousValue} hours
               </p>
               <p className="text-xs text-gray-600">
-                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue} days ({deltaPercent >= '0' ? '+' : ''}{deltaPercent}%)
+                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue} hours ({deltaPercent >= '0' ? '+' : ''}{deltaPercent}%)
               </p>
             </div>
           )}
@@ -671,7 +825,7 @@ export default function AnalyticsPage() {
     return null
   }
 
-  // Wrapper component to pass stat context to Days Lost tooltip
+  // Wrapper component to pass stat context to Hours Lost tooltip
   const DaysLostTooltipWrapper = (stat: any) => (props: any) => <DaysLostTooltip {...props} stat={stat} />
 
   // Enhanced tooltip for Forms Stats charts
@@ -741,6 +895,89 @@ export default function AnalyticsPage() {
     window.addEventListener('keydown', handleEsc)
     return () => window.removeEventListener('keydown', handleEsc)
   }, [])
+
+  // Function to filter forms by their status AND specific month
+  const filterFormsByStatusAndMonth = async (forms: any[], statusKey: string, monthStr?: string) => {
+    if (!forms || forms.length === 0) return []
+    
+    try {
+      // Get all form responses to determine status
+      const { data: responses, error: responsesError } = await supabase
+        .from('form_responses')
+        .select('form_id, respondent_id, submitted_at')
+      
+      if (responsesError) {
+        console.error('Error fetching responses for status filtering:', responsesError)
+        return forms // Return all forms if we can't filter
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      const filteredForms: any[] = []
+
+      for (const form of forms) {
+        const formUsers = form.metadata?.users || []
+        const dueDate = form.settings?.due_date
+        
+        // Skip if month filtering is requested and form doesn't match
+        if (monthStr) {
+          // Convert display month (e.g., "Oct 24") to date format (e.g., "2024-10")
+          const formMonth = form.created_at?.slice(0, 7) || dueDate?.slice(0, 7)
+          const targetMonth = convertDisplayMonthToDate(monthStr)
+          if (formMonth !== targetMonth) continue
+        }
+
+        for (const formUser of formUsers) {
+          const userResponse = responses?.find((r: any) => 
+            r.form_id === form.id && r.respondent_id === formUser.id
+          )
+
+          let shouldInclude = false
+
+          if (statusKey === 'confirmed') {
+            // Completed on time (submitted before or on due date)
+            if (userResponse && dueDate && userResponse.submitted_at) {
+              const submittedDate = userResponse.submitted_at.split('T')[0]
+              if (submittedDate <= dueDate) {
+                shouldInclude = true
+              }
+            }
+          } else if (statusKey === 'in_progress') {
+            // Currently pending (no response and not overdue yet)
+            if (!userResponse && dueDate && dueDate >= today) {
+              shouldInclude = true
+            }
+          } else if (statusKey === 'overdue') {
+            // Overdue (no response and past due date)
+            if (!userResponse && dueDate && dueDate < today) {
+              shouldInclude = true
+            }
+          }
+
+          // Add form once per matching status (avoid duplicates)
+          if (shouldInclude && !filteredForms.some(f => f.id === form.id)) {
+            filteredForms.push(form)
+            break // Stop checking other users for this form
+          }
+        }
+      }
+
+      return filteredForms
+    } catch (error) {
+      console.error('Error in filterFormsByStatusAndMonth:', error)
+      return forms // Return all forms if filtering fails
+    }
+  }
+
+  // Helper function to convert display month to date format
+  const convertDisplayMonthToDate = (displayMonth: string): string => {
+    // Convert "Oct 24" to "2024-10", "Jan 25" to "2025-01", etc.
+    const [monthName, year] = displayMonth.split(' ')
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthIndex = monthNames.indexOf(monthName)
+    const fullYear = year.length === 2 ? `20${year}` : year
+    const monthNumber = (monthIndex + 1).toString().padStart(2, '0')
+    return `${fullYear}-${monthNumber}`
+  }
 
   // Function to filter forms by their status (confirmed, in progress, overdue)
   const filterFormsByStatus = async (forms: any[], statusKey: string) => {
@@ -861,7 +1098,15 @@ export default function AnalyticsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 10, fill: '#666' }} 
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                    height={25}
+                    tickMargin={5}
+                    angle={0}
+                  />
                   <YAxis tick={{ fontSize: 12 }} axisLine={false} />
                   <Tooltip />
                   <Area 
@@ -1221,14 +1466,14 @@ return (
       <span>Analytics</span>
     </div>
     
-    {/* Days Lost Section */}
+    {/* Hours Lost Section */}
     <div className="bg-white rounded-2xl p-4 sm:p-6 mb-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 sm:gap-0">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg sm:text-xl font-semibold font-inter">Days Lost</h2>
+            <h2 className="text-lg sm:text-xl font-semibold font-inter">Hours Lost</h2>
             <span className="bg-[#F2F2F2] text-[#272937] text-xs font-medium font-inter rounded px-3 py-1">
-              Total {daysLostLoading ? '...' : Object.values(daysLostData || {}).reduce((acc: number, arr: any) => acc + (arr[arr.length-1]?.value || 0), 0)} days
+              Total {daysLostLoading ? '...' : Object.values(daysLostData || {}).reduce((acc: number, arr: any) => acc + (arr[arr.length-1]?.value || 0), 0)} hours
             </span>
           </div>
           <p className="text-xs text-gray-500 font-inter">
@@ -1302,7 +1547,7 @@ return (
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-        {reasons.map((reason, i) => {
+        {(showMoreHoursLost ? reasons : reasons.slice(0, 3)).map((reason, i) => {
           const data = daysLostData?.[reason.key] || []
           const last = data.at(-1) || { value: 0, formsCount: 0 }
           return (
@@ -1325,7 +1570,7 @@ return (
                 <span className="text-[28px] font-semibold" style={{ color: '#131B33' }}>{daysLostLoading ? '...' : last.value}</span>
               </div>
               {/* Recharts AreaChart */}
-              <div className="w-full h-28 mt-4"
+              <div className="w-full h-36 mt-4"
                 ref={i === 0 ? chartContainerRef : undefined}
                 onClick={e => data.length > 0 ? handleChartClick({ ...reason, data }, e) : setSidebarError('No data for this period.')}
               >
@@ -1335,7 +1580,7 @@ return (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart
                       data={data}
-                      margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                      margin={{ top: 5, right: 10, left: 0, bottom: 35 }}
                       onMouseMove={e => handleChartMouseMove({ ...reason, data }, e)}
                       onMouseLeave={handleChartMouseLeave}
                     >
@@ -1348,7 +1593,15 @@ return (
                       <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
                       <Tooltip content={DaysLostTooltipWrapper({ ...reason, data })} />
                       <Area type="monotone" dataKey="value" stroke={reason.color} fill="url(#redArea)" strokeWidth={2} dot={{ r: 4, fill: 'transparent', stroke: 'transparent' }} isAnimationActive={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 10, fill: '#666' }} 
+                        axisLine={false}
+                        interval="preserveStartEnd"
+                        height={25}
+                        tickMargin={5}
+                        angle={0}
+                      />
                       <YAxis hide />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1358,6 +1611,18 @@ return (
           )
         })}
       </div>
+      
+      {/* Show More/Less Toggle */}
+      {reasons.length > 3 && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => setShowMoreHoursLost(!showMoreHoursLost)}
+            className="px-6 py-2 bg-[#FF6551] text-white rounded-lg font-inter font-medium hover:bg-[#E55A4A] transition-colors"
+          >
+            {showMoreHoursLost ? 'Show Less' : 'Show More'}
+          </button>
+        </div>
+      )}
     </div>
     
     {/* Forms Section */}
@@ -1453,7 +1718,7 @@ return (
                 <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
                 <div className="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
               </div>
-              <div className="w-full h-28 mt-4 bg-gray-200 rounded animate-pulse"></div>
+              <div className="w-full h-36 mt-4 bg-gray-200 rounded animate-pulse"></div>
             </div>
           ))
         ) : (
@@ -1481,13 +1746,13 @@ return (
                 </span>
               </div>
               {/* Recharts AreaChart */}
-              <div className="w-full h-28 mt-4"
+              <div className="w-full h-36 mt-4"
                 onClick={e => handleChartClick(stat, e)}
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={stat.data}
-                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 35 }}
                     onMouseMove={e => handleChartMouseMove(stat, e)}
                     onMouseLeave={handleChartMouseLeave}
                   >
@@ -1506,7 +1771,15 @@ return (
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 10, fill: '#666' }} 
+                      axisLine={false}
+                      interval="preserveStartEnd"
+                      height={25}
+                      tickMargin={5}
+                      angle={0}
+                    />
                     <YAxis hide />
                     <Tooltip content={FormsTooltipWrapper(stat)} />
                     <Area type="monotone" dataKey="value" stroke={stat.stroke} fill={stat.fill} strokeWidth={2} dot={{ r: 4, fill: 'transparent', stroke: 'transparent' }} isAnimationActive={false} />
@@ -1571,11 +1844,11 @@ return (
 
     {/* Filter Drawers */}
     
-    {/* Days Lost Filter Drawer */}
+    {/* Hours Lost Filter Drawer */}
     <FilterDrawer
       isOpen={daysLostFilterDrawerOpen}
       onClose={() => setDaysLostFilterDrawerOpen(false)}
-      title="Days Lost Filters"
+      title="Hours Lost Filters"
       filters={[
         {
           key: 'user',

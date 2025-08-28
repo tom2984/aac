@@ -9,13 +9,7 @@ import { useFilteredForms } from '@/hooks/useFilteredForms'
 import FilterDrawer, { FilterOption } from '@/components/FilterDrawer'
 import { useSortableColumn } from '@/hooks/useSortableColumn'
 
-const stats = [
-  { label: 'Audit', value: '12', delta: '+7%' },
-  { label: 'Compliance', value: 'N/A', delta: '+5%' },
-  { label: 'Incidents', value: '9', delta: '+10%' },
-  { label: 'Monitoring', value: '120', delta: '+33%' },
-  { label: 'Risk Assessments', value: 'N/A', delta: '' },
-]
+// Stats array removed - analytics hidden per user request
 
 // const actionsColumns = [
 //   'Description', 'Site', 'Module', 'Responsible', 'Priority', 'Due'
@@ -83,37 +77,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Statistics Group */}
-      <div className="bg-white border border-[#2729371F] rounded-[10px] p-4 sm:p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-[32px]">
-          {stats.map((stat, index) => {
-            let deltaColor = ''
-            if (stat.delta) {
-              deltaColor = stat.delta.startsWith('-') ? 'text-[#FF3A30]' : 'text-[#4FC62B]'
-            }
-            return (
-              <div
-                key={stat.label}
-                className={`flex flex-col items-start justify-center px-4 sm:px-6 py-4 gap-y-2 ${
-                  index !== stats.length - 1 ? 'border-b sm:border-b-0 sm:border-r border-[#2729371F] pb-4 sm:pb-0' : ''
-                }`}
-                role="region"
-                aria-label={stat.label}
-                tabIndex={0}
-              >
-                <span className="text-[12px] font-medium text-[#27293759] font-inter">{stat.label}</span>
-                <span className="text-[24px] sm:text-[32px] font-semibold text-[#272937] font-inter">{stat.value}</span>
-                {stat.delta && (
-                  <span className={`text-[14px] font-medium font-inter ${deltaColor}`}>
-                    {stat.delta}
-                    <span className="text-[12px] font-medium text-[#27293759] font-inter ml-1">this week</span>
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* Statistics Group - Hidden per user request */}
 
       {/* Actions Group - TEMPORARILY HIDDEN 
       <div className="bg-white rounded-2xl shadow p-6">

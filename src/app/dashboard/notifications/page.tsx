@@ -279,7 +279,12 @@ export default function NotificationsPage() {
                         <div className="flex items-center justify-between sm:justify-end gap-4 ml-9 sm:ml-0">
                           <div className="flex items-center gap-4">
                             {notification.data?.form_id && (
-                              <button className="text-[#FF6551] text-[13px] font-inter font-medium hover:text-[#E55A4A] transition-colors whitespace-nowrap">
+                              <button 
+                                onClick={() => {
+                                  window.location.href = `/dashboard/forms?viewResponses=${notification.data.form_id}`
+                                }}
+                                className="text-[#FF6551] text-[13px] font-inter font-medium hover:text-[#E55A4A] transition-colors whitespace-nowrap"
+                              >
                                 View Form
                               </button>
                             )}

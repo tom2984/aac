@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       console.log(`Question type: '${questionType}' (valid: ${isValidType})`)
       
       if (!isValidType) {
-        const validTypes = ['short_text', 'long_text', 'single_select', 'multi_select', 'composite']
+        const validTypes = ['short_text', 'long_text', 'single_select', 'multi_select', 'composite', 'date']
         console.error(`❌ Invalid question type: '${questionType}'. Valid types:`, validTypes)
         questionResults.push({ 
           error: `Invalid question type: '${questionType}'. Valid types: ${validTypes.join(', ')}`, 
@@ -100,6 +100,7 @@ export async function POST(request: Request) {
         order_index,
         options: options.length ? JSON.stringify(options) : '[]',
         preset_question_id: q.preset_question_id || null,
+        email_notify: q.email_notify || false,
       }
       
       console.log('Inserting question data:', {

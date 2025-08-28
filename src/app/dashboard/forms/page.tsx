@@ -31,11 +31,12 @@ type Question = {
   isRequired: boolean
   usePreset: boolean
   preset_question_id: string
-  answer_format: 'text' | 'number'
+  answer_format: 'text' | 'number' | 'date'
   sub_questions: Array<{
     question: string
     answer: string | number
   }>
+  email_notify?: boolean
 }
 
 type PresetQuestion = {
@@ -203,13 +204,13 @@ export default function FormsPage() {
     }
   }, [editParam, view])
 
-  // Handle viewResponses parameter from URL
+  // Handle viewResponses parameter from URL - simplified and more reliable
   useEffect(() => {
-    if (viewResponsesParam && forms.length > 0 && view === 'responses' && !viewingResponsesFormId) {
-      // Only handle the viewResponses parameter if we're in responses view but don't have data yet
+    if (viewResponsesParam && forms.length > 0) {
+      setView('responses')
       handleViewResponses(viewResponsesParam)
     }
-  }, [searchParams, forms, view, viewingResponsesFormId])
+  }, [viewResponsesParam, forms.length])
 
   const handleAddNewForm = () => {
     // Reset form state for new form
@@ -274,6 +275,7 @@ export default function FormsPage() {
         preset_question_id: q.preset_question_id || '',
         answer_format: q.answer_format || 'text',
         sub_questions: q.sub_questions ? JSON.parse(q.sub_questions) : [],
+        email_notify: q.email_notify || false,
       })) || []
       
       setQuestions(loadedQuestions.length > 0 ? loadedQuestions : [
@@ -437,7 +439,7 @@ export default function FormsPage() {
   }
 
   // New handlers for composite questions and answer format
-  const handleAnswerFormatChange = (qid: number, format: 'text' | 'number') => {
+  const handleAnswerFormatChange = (qid: number, format: 'text' | 'number' | 'date') => {
     setQuestions((prev) =>
       prev.map((q) =>
         q.id === qid ? { ...q, answer_format: format } : q
@@ -493,7 +495,11 @@ export default function FormsPage() {
     const workDaysPreset = [
       { question: 'Weather', answer: 0 },
       { question: 'Technical problems', answer: 0 },
-      { question: 'Other reasons', answer: 0 }
+      { question: 'Other reasons', answer: 0 },
+      { question: 'Client', answer: 0 },
+      { question: 'Materials not arriving (Supplier)', answer: 0 },
+      { question: 'Weather drying up', answer: 0 },
+      { question: 'Leaving site', answer: 0 }
     ]
     
     setQuestions((prev) =>
@@ -504,6 +510,26 @@ export default function FormsPage() {
               sub_questions: workDaysPreset,
               answer_format: 'number'
             }
+          : q
+      )
+    )
+  }
+
+  // Email notification toggle handler
+  const handleEmailNotifyToggle = (qid: number) => {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid ? { ...q, email_notify: !q.email_notify } : q
+      )
+    )
+  }
+
+  // Add "Other" option to select questions
+  const addOtherOption = (qid: number) => {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid && (q.type === 'single_select' || q.type === 'multi_select')
+          ? { ...q, options: [...q.options.filter(opt => opt !== 'Other'), 'Other'] }
           : q
       )
     )
@@ -764,8 +790,9 @@ export default function FormsPage() {
           order_index,
           options: options.length ? JSON.stringify(options) : '[]',
           preset_question_id: q.preset_question_id || null,
-          answer_format: q.answer_format || 'text',
+          answer_format: q.answer_format && ['text', 'number', 'date'].includes(q.answer_format) ? q.answer_format : 'text',
           sub_questions: q.sub_questions && q.sub_questions.length > 0 ? JSON.stringify(q.sub_questions) : '[]',
+          email_notify: q.email_notify || false,
         }
         
         console.log(`📤 Inserting question data:`, questionData)
@@ -1779,6 +1806,17 @@ export default function FormsPage() {
                                 />
                                 Number
                               </label>
+                              <label className="flex items-center gap-1 text-sm font-inter">
+                                <input
+                                  type="radio"
+                                  name={`format-${q.id}`}
+                                  value="date"
+                                  checked={q.answer_format === 'date'}
+                                  onChange={() => handleAnswerFormatChange(q.id, 'date')}
+                                  className="text-[#FF6551]"
+                                />
+                                Date
+                              </label>
                             </div>
                           </div>
                         )}
@@ -1868,16 +1906,27 @@ export default function FormsPage() {
                             <button className="p-2 rounded hover:bg-gray-100" aria-label="Delete" onClick={() => removeOption(q.id, i)}><svg width="18" height="18" fill="none" stroke="#FF6551" strokeWidth="2" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg></button>
                           </div>
                         ))}
-                        <button className="px-4 py-2 rounded border border-gray-200 bg-white hover:bg-gray-100 font-inter font-medium" onClick={() => addOption(q.id)}>Add Option</button>
+                        <div className="flex gap-2">
+                          <button className="px-4 py-3 rounded border border-gray-200 bg-white hover:bg-gray-100 font-inter text-sm" onClick={() => addOption(q.id)}>Add Option</button>
+                          <button className="px-4 py-3 rounded border border-gray-200 bg-white hover:bg-gray-100 font-inter text-sm text-[#FF6551]" onClick={() => addOtherOption(q.id)}>Add "Other" Option</button>
+                        </div>
                       </div>
                     ) : q.type === 'short_text' && !q.usePreset ? (
                       <div className="mb-2">
                         <label className="text-sm text-gray-600 font-inter mb-1 block">Preview</label>
-                        <input
-                          className="w-full border border-gray-200 rounded px-4 py-3 font-inter text-sm bg-gray-50"
-                          placeholder="User will type a short answer here..."
-                          disabled
-                        />
+                        {q.answer_format === 'date' ? (
+                          <input
+                            type="date"
+                            className="w-full border border-gray-200 rounded px-4 py-3 font-inter text-sm bg-gray-50"
+                            disabled
+                          />
+                        ) : (
+                          <input
+                            className="w-full border border-gray-200 rounded px-4 py-3 font-inter text-sm bg-gray-50"
+                            placeholder="User will type a short answer here..."
+                            disabled
+                          />
+                        )}
                       </div>
                     ) : q.type === 'long_text' && !q.usePreset ? (
                       <div className="mb-2">
@@ -1945,16 +1994,27 @@ export default function FormsPage() {
                       </div>
                     ) : null}
 
-                    <div className="flex items-center gap-2 mt-4">
-                      <label className="flex items-center gap-2 text-sm text-gray-600 font-inter">
-                        <input
-                          type="checkbox"
-                          className="form-checkbox h-4 w-4 text-[#FF6551] focus:ring-[#FF6551] focus:ring-offset-0"
-                          checked={q.isRequired}
-                          onChange={e => handleQuestionChange(q.id, 'isRequired', e.target.checked)}
-                        />
-                        Required
-                      </label>
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-sm text-gray-600 font-inter">
+                          <input
+                            type="checkbox"
+                            className="form-checkbox h-4 w-4 text-[#FF6551] focus:ring-[#FF6551] focus:ring-offset-0"
+                            checked={q.isRequired}
+                            onChange={e => handleQuestionChange(q.id, 'isRequired', e.target.checked)}
+                          />
+                          Required
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-600 font-inter">
+                          <input
+                            type="checkbox"
+                            className="form-checkbox h-4 w-4 text-[#FF6551] focus:ring-[#FF6551] focus:ring-offset-0"
+                            checked={q.email_notify || false}
+                            onChange={e => handleEmailNotifyToggle(q.id)}
+                          />
+                          Notify me
+                        </label>
+                      </div>
                     </div>
                     </div>
                     
