@@ -202,6 +202,7 @@ async function generateWeeklyData(
         month: weekStart.toISOString().slice(0, 7),
         advancedNegotiations: weekAdvancedAmount,
         closedWon: weeklyWonAmount, // Show weekly amount, not cumulative
+        monthlyWon: weeklyWonAmount, // Same as closedWon for weekly data
         weekStart: weekStartStr,
         weekEnd: weekEndStr
       });
@@ -231,6 +232,7 @@ async function generateWeeklyData(
         month: currentDate.toISOString().slice(0, 7),
         advancedNegotiations: weekAdvancedAmount,
         closedWon: 0, // No data for this week
+        monthlyWon: 0, // Same as closedWon for weekly data
         weekStart: currentDate.toISOString().split('T')[0],
         weekEnd: weekEnd.toISOString().split('T')[0]
       });
