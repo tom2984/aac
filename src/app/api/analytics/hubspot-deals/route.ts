@@ -93,7 +93,7 @@ async function generateAdvancedNegotiationsHistory(
     const name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
     
     // Check if we have a snapshot for this month
-    const existingSnapshot = existingSnapshots?.find(s => 
+    const existingSnapshot = existingSnapshots?.find((s: any) => 
       s.snapshot_date.startsWith(monthKey)
     );
 
