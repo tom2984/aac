@@ -51,7 +51,7 @@ function generateMonthlyData(snapshots: any[]) {
     const month = date.toISOString().slice(0, 7); // YYYY-MM
     const name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
     
-    const snapshot = snapshots.find(s => s.snapshot_date.startsWith(month));
+    const snapshot = snapshots.find((s: any) => s.snapshot_date.startsWith(month));
     
     monthlyData.push({
       month,
@@ -348,7 +348,7 @@ export async function GET(request: NextRequest) {
 
     if (currentClosedWonAmount === 0 && closedWonDeals.length > 0) {
       console.warn('⚠️ Found closed won deals but total amount is 0. Checking deal amounts...');
-      closedWonDeals.forEach((deal: any, i) => {
+      closedWonDeals.forEach((deal: any, i: number) => {
         console.log(`Deal ${i + 1}:`, {
           amount: deal.properties?.amount,
           parsed: parseFloat(deal.properties?.amount || '0'),
@@ -429,7 +429,7 @@ export async function GET(request: NextRequest) {
 
     // Generate chart data with real historical progression
     // For Amount Won: Show monthly amounts (not cumulative) for filtered view clarity
-    const chartData = historicalClosedWon.map((item, index) => {
+    const chartData = historicalClosedWon.map((item: any, index: number) => {
       const advancedSnapshot = advancedNegotiationsSnapshots[index];
       
       return {
@@ -504,7 +504,7 @@ export async function GET(request: NextRequest) {
           const name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
           
           // Find the corresponding data from our historical chart data
-          const historicalData = chartData.find(item => item.month === monthKey);
+          const historicalData = chartData.find((item: any) => item.month === monthKey);
           
           if (historicalData) {
             // Use existing historical data
@@ -549,7 +549,7 @@ export async function GET(request: NextRequest) {
           const name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
           
           // Find the corresponding data from our historical chart data
-          const historicalData = chartData.find(item => item.month === monthKey);
+          const historicalData = chartData.find((item: any) => item.month === monthKey);
           
           if (historicalData) {
             filteredChartData.push(historicalData);
@@ -608,7 +608,7 @@ export async function GET(request: NextRequest) {
       closedWon: periodClosedWonTotal,
       dataPoints: filteredChartData.length,
       explanation: 'Advanced Negotiations = pipeline value at END of selected period (not sum)',
-      periodBreakdown: filteredChartData.map((item, index) => ({
+      periodBreakdown: filteredChartData.map((item: any, index: number) => ({
         position: index + 1,
         date: item.name,
         advancedAmount: item.advancedNegotiations,
