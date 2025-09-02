@@ -7,6 +7,8 @@ import { useUser } from '@/app/UserProvider';
 import { supabase } from '@/lib/supabase';
 
 const ROLE_OPTIONS = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'manager', label: 'Manager' },
   { value: 'employee', label: 'Employee' },
 ];
 
@@ -24,6 +26,7 @@ type TeamMember = {
   name: string;
   email: string;
   status: string;
+  role: string;
 };
 
 const SettingsPage = () => {
@@ -32,7 +35,8 @@ const SettingsPage = () => {
   const profile = userContext?.profile;
   const refreshProfile = userContext?.refreshProfile;
   // Team members state
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [employees, setEmployees] = useState<TeamMember[]>([]);
+  const [adminsAndManagers, setAdminsAndManagers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
 
   // InviteMembers logic
@@ -41,33 +45,48 @@ const SettingsPage = () => {
   const [role, setRole] = useState(ROLE_OPTIONS[0].value);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch team members (employees invited by this admin)
+  // Fetch team members (all users invited by this admin)
   useEffect(() => {
     const fetchTeamMembers = async () => {
       if (!user) return;
 
-      const { data, error } = await supabase
+      // Fetch employees
+      const { data: employeeData, error: employeeError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, status, invited_by')
+        .select('id, first_name, last_name, email, status, invited_by, role')
         .eq('invited_by', user.id)
         .eq('role', 'employee');
 
-      if (error) {
-        console.error('Error fetching team members:', error);
+      if (employeeError) {
+        console.error('Error fetching employees:', employeeError);
         return;
       }
 
-      const members = data.map(member => ({
+      // Fetch admins and managers
+      const { data: adminManagerData, error: adminManagerError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email, status, invited_by, role')
+        .eq('invited_by', user.id)
+        .in('role', ['admin', 'manager']);
+
+      if (adminManagerError) {
+        console.error('Error fetching admins/managers:', adminManagerError);
+        return;
+      }
+
+      const formatMember = (member: any) => ({
         name: member.first_name && member.last_name 
           ? `${member.first_name} ${member.last_name}` 
           : 'Pending',
         email: member.email || 'Email not available',
         status: member.status === 'invited' ? 'Pending' : 
                member.status === 'active' ? 'Active' : 
-               'Inactive'
-      }));
+               'Inactive',
+        role: member.role
+      });
 
-      setTeamMembers(members);
+      setEmployees(employeeData.map(formatMember));
+      setAdminsAndManagers(adminManagerData.map(formatMember));
     };
 
     fetchTeamMembers();
@@ -287,7 +306,7 @@ const SettingsPage = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
             <span className="whitespace-nowrap">
-              {teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}
+              {employees.length + adminsAndManagers.length} team member{(employees.length + adminsAndManagers.length) !== 1 ? 's' : ''}
             </span>
           </div>
         </div>
@@ -371,8 +390,32 @@ const SettingsPage = () => {
 
 
 
-        {/* Team Members Table */}
-        <TeamMembersTable teamMembers={teamMembers} />
+        {/* Admins & Managers Section */}
+        {adminsAndManagers.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 font-inter">
+              Admins & Managers ({adminsAndManagers.length})
+            </h3>
+            <TeamMembersTable teamMembers={adminsAndManagers} showRole={true} />
+          </div>
+        )}
+
+        {/* Employees Section */}
+        {employees.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 font-inter">
+              Employees ({employees.length})
+            </h3>
+            <TeamMembersTable teamMembers={employees} showRole={false} />
+          </div>
+        )}
+
+        {/* No team members message */}
+        {employees.length === 0 && adminsAndManagers.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <p className="font-inter">No team members yet. Start by inviting some!</p>
+          </div>
+        )}
       </div>
     </div>
   );

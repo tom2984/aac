@@ -12,7 +12,7 @@ import React, { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import DashboardHeader from '@/components/DashboardHeader'
 import { useUser } from '@/app/UserProvider'
-import { AdminOnly } from '@/components/RoleGuard'
+import { AdminAndManagerOnly } from '@/components/RoleGuard'
 
 type MenuItem = {
   name: string
@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ]
 
   return (
-    <AdminOnly>
+    <AdminAndManagerOnly>
       <div className="flex min-h-screen bg-[#F7F7F8]">
         <Sidebar 
           isOpen={sidebarOpen} 
@@ -71,7 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
       </div>
-    </AdminOnly>
+    </AdminAndManagerOnly>
   )
 }
 

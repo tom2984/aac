@@ -4,13 +4,15 @@ type TeamMember = {
   name: string;
   email: string;
   status: string;
+  role: string;
 };
 
 type TeamMembersTableProps = {
   teamMembers: TeamMember[];
+  showRole?: boolean;
 };
 
-const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers }) => {
+const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRole = false }) => {
   if (teamMembers.length === 0) return null;
 
   const copyInviteLink = async (email: string) => {
@@ -26,7 +28,6 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers }) => {
 
   return (
     <div className="w-full font-inter">
-      <h3 className="text-base sm:text-lg font-semibold mb-4 font-inter">Team Members</h3>
       
       {/* Mobile Card Layout */}
       <div className="block sm:hidden space-y-3">
@@ -37,6 +38,15 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers }) => {
                 <div className="text-sm font-medium text-gray-700 mb-1">Email</div>
                 <div className="text-sm text-gray-900 break-all">{member.email}</div>
               </div>
+              
+              {showRole && (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">Role</div>
+                  <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                    {member.role}
+                  </span>
+                </div>
+              )}
               
               <div className="flex items-center justify-between">
                 <div>
@@ -72,6 +82,9 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers }) => {
           <thead>
             <tr className="border-b border-gray-200">
               <th className="py-3 px-4 font-medium text-gray-700 font-inter text-sm">Email</th>
+              {showRole && (
+                <th className="py-3 px-4 font-medium text-gray-700 font-inter text-sm">Role</th>
+              )}
               <th className="py-3 px-4 font-medium text-gray-700 font-inter text-sm">Status</th>
               <th className="py-3 px-4 font-medium text-gray-700 font-inter text-sm">Actions</th>
             </tr>
@@ -80,6 +93,13 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers }) => {
             {teamMembers.map((member, idx) => (
               <tr key={member.email + idx} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-3 px-4 font-inter text-sm">{member.email}</td>
+                {showRole && (
+                  <td className="py-3 px-4 font-inter">
+                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
+                      {member.role}
+                    </span>
+                  </td>
+                )}
                 <td className="py-3 px-4 font-inter">
                   <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                     member.status === 'Active' 

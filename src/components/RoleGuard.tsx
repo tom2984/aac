@@ -49,6 +49,14 @@ export function AdminOnly({ children }: { children: React.ReactNode }) {
   )
 }
 
+export function AdminAndManagerOnly({ children }: { children: React.ReactNode }) {
+  return (
+    <RoleGuard allowedRoles={['admin', 'manager']}>
+      {children}
+    </RoleGuard>
+  )
+}
+
 export function EmployeeOnly({ children }: { children: React.ReactNode }) {
   return (
     <RoleGuard allowedRoles={['employee']} redirectTo="/dashboard">

@@ -192,7 +192,7 @@ export interface Database {
           id: string
           first_name: string | null
           last_name: string | null
-          role: 'admin' | 'employee'
+          role: 'admin' | 'manager' | 'employee'
           status: 'invited' | 'active' | 'inactive'
           invited_by: string | null
           avatar_url: string | null
@@ -203,7 +203,7 @@ export interface Database {
           id: string
           first_name?: string | null
           last_name?: string | null
-          role?: 'admin' | 'employee'
+          role?: 'admin' | 'manager' | 'employee'
           status?: 'invited' | 'active' | 'inactive'
           invited_by?: string | null
           avatar_url?: string | null
@@ -214,7 +214,7 @@ export interface Database {
           id?: string
           first_name?: string | null
           last_name?: string | null
-          role?: 'admin' | 'employee'
+          role?: 'admin' | 'manager' | 'employee'
           status?: 'invited' | 'active' | 'inactive'
           invited_by?: string | null
           avatar_url?: string | null

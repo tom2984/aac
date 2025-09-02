@@ -89,6 +89,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
+    // 🔒 SECURITY: Only admins can access analytics data
+    if (currentUserProfile.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
     // Get filter parameters from URL
     const { searchParams } = new URL(request.url)
     const userFilter = searchParams.get('user_filter') // Filter by specific respondent

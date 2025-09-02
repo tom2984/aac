@@ -109,6 +109,24 @@ export class SupabaseAPIClient {
     return this.apiCall(endpoint, {}, true) // Require authentication
   }
 
+  // HubSpot analytics method
+  async getHubSpotAnalytics(filters?: { dateFrom?: string; dateTo?: string; refresh?: boolean }) {
+    const params = new URLSearchParams()
+    
+    if (filters?.dateFrom) {
+      params.append('date_from', filters.dateFrom)
+    }
+    if (filters?.dateTo) {
+      params.append('date_to', filters.dateTo)
+    }
+    if (filters?.refresh) {
+      params.append('refresh', 'true')
+    }
+    
+    const endpoint = `/analytics/hubspot-deals${params.toString() ? `?${params.toString()}` : ''}`
+    return this.apiCall(endpoint, {}, true)
+  }
+
   // Preset questions methods
   async getPresetQuestions(adminId: string) {
     return this.apiCall(`/preset-questions?admin_id=${adminId}`)

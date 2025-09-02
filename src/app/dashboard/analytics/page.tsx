@@ -1,7 +1,7 @@
 "use client"
 
 import { AreaChart, Area, ResponsiveContainer, Tooltip, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass, Users, Package, Droplets, LogOut } from 'lucide-react'
+import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass, Users, Package, Droplets, LogOut, TrendingUp, Award } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { bisector } from 'd3-array'
 import { useForms } from '@/hooks/useForms'
@@ -11,6 +11,7 @@ import { useFilteredForms } from '@/hooks/useFilteredForms'
 import { useUser } from '@/app/UserProvider'
 import FilterDrawer, { FilterOption } from '@/components/FilterDrawer'
 import { useSortableColumn } from '@/hooks/useSortableColumn'
+import { AdminOnly } from '@/components/RoleGuard'
 
 const months = [
   '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06',
@@ -57,6 +58,28 @@ const formsStatsTemplate = [
   },
 ]
 
+// Analytics stats template for the new section
+const analyticsStatsTemplate = [
+  {
+    key: 'advanced_negotiations',
+    icon: <TrendingUp className="w-6 h-6 text-[#2563EB]" />,
+    label: 'Amount in Advanced Negotiations',
+    deltaColor: 'text-[#2563EB]',
+    chart: 'blue',
+    stroke: '#2563EB',
+    fill: 'url(#blueArea)',
+  },
+  {
+    key: 'amount_won',
+    icon: <Award className="w-6 h-6 text-[#10B981]" />,
+    label: 'Amount Won',
+    deltaColor: 'text-[#10B981]',
+    chart: 'green',
+    stroke: '#10B981',
+    fill: 'url(#successArea)',
+  },
+]
+
 const users = [
   'Leslie Alexander',
   'Dmytro Kalenskyi',
@@ -91,6 +114,11 @@ export default function AnalyticsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<{ stat: any, dataPoint: any } | null>(null)
   const [lastHovered, setLastHovered] = useState<any>(null)
+  
+  // Consistent currency formatting function
+  const formatCurrency = (amount: number) => {
+    return `£${Math.round(amount).toLocaleString()}`
+  }
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [focusedStat, setFocusedStat] = useState<any>(null)
   const userContext = useUser()
@@ -116,6 +144,13 @@ export default function AnalyticsPage() {
   const [focusedDateFrom, setFocusedDateFrom] = useState('')
   const [focusedDateTo, setFocusedDateTo] = useState('')
   const [focusedSearchTerm, setFocusedSearchTerm] = useState('')
+  
+  // Analytics filtering state
+  const [analyticsModuleFilter, setAnalyticsModuleFilter] = useState('All')
+  const [analyticsPersonFilter, setAnalyticsPersonFilter] = useState('All')
+  const [analyticsDateFrom, setAnalyticsDateFrom] = useState('')
+  const [analyticsDateTo, setAnalyticsDateTo] = useState('')
+  const [analyticsFilterDrawerOpen, setAnalyticsFilterDrawerOpen] = useState(false)
   
   // Pagination states for focused view
   const [focusedCurrentPage, setFocusedCurrentPage] = useState(1)
@@ -198,6 +233,9 @@ export default function AnalyticsPage() {
   // Dynamic forms stats state
   const [formsStats, setFormsStats] = useState<any[]>([])
   const [formsStatsLoading, setFormsStatsLoading] = useState(true)
+  const [analyticsStats, setAnalyticsStats] = useState<any[]>([])
+  const [analyticsStatsLoading, setAnalyticsStatsLoading] = useState(true)
+  const [analyticsMetadata, setAnalyticsMetadata] = useState<any>(null)
   
   // State for filtered focused forms
   const [filteredFocusedForms, setFilteredFocusedForms] = useState<any[]>([])
@@ -428,7 +466,7 @@ export default function AnalyticsPage() {
       }
     }
     fetchAllData()
-  }, [daysLostUserFilter, daysLostModuleFilter, daysLostDateFrom, daysLostDateTo]) // Re-fetch when filters change
+  }, [daysLostUserFilter, daysLostModuleFilter]) // Re-fetch when non-date filters change
 
   // Calculate dynamic forms stats
   useEffect(() => {
@@ -598,15 +636,18 @@ export default function AnalyticsPage() {
             })
           }
 
-          // Use the last available data point within the filtered range
-          const currentValue = filteredData.length > 0 ? filteredData[filteredData.length - 1]?.value || 0 : 0
-          const previousValue = filteredData.length > 1 ? filteredData[filteredData.length - 2]?.value || 0 : 0
-          const delta = previousValue > 0 ? ((currentValue - previousValue) / previousValue * 100).toFixed(2) : '0.00'
+          // Use the total for the period instead of just the last value
+          const currentValue = filteredData.reduce((sum, item) => sum + (item.value || 0), 0)
+
+          console.log(`📊 ${template.key} Forms total:`, {
+            currentValue,
+            note: 'No percentage calculations - showing total values only'
+          });
 
           return {
             ...template,
             value: currentValue,
-            delta: `${delta}%`,
+            delta: '0%', // No percentages
             data: filteredData.length > 0 ? filteredData : monthlyData
           }
         })
@@ -618,7 +659,7 @@ export default function AnalyticsPage() {
         setFormsStats(formsStatsTemplate.map(template => ({
           ...template,
           value: 0,
-          delta: '0%',
+          delta: '0%', // No percentages
           data: Array.from({ length: 12 }, (_, i) => ({ value: 0, name: `Month ${i + 1}` }))
         })))
       } finally {
@@ -627,7 +668,254 @@ export default function AnalyticsPage() {
     }
 
     calculateFormsStats()
-  }, [forms, formsLoading, formsModuleFilter, formsPersonFilter, formsDateFrom, formsDateTo, user?.id])
+  }, [forms, formsLoading, formsModuleFilter, formsPersonFilter, user?.id])
+
+  // Analytics stats calculation effect with daily auto-refresh
+  useEffect(() => {
+    const fetchHubSpotAnalytics = async (forceRefresh = false) => {
+      try {
+        setAnalyticsStatsLoading(true)
+        
+        console.log('🔄 Fetching HubSpot analytics with filters...', {
+          dateFrom: analyticsDateFrom,
+          dateTo: analyticsDateTo,
+          refresh: forceRefresh
+        })
+        
+        const response = await supabaseAPI.getHubSpotAnalytics({
+          dateFrom: analyticsDateFrom || undefined,
+          dateTo: analyticsDateTo || undefined,
+          refresh: forceRefresh
+        })
+        
+        if (response.success) {
+          console.log('📋 Raw response data:', response.data);
+          console.log('📊 Response metadata:', response.metadata);
+          
+          // Process API response data
+          
+          const analyticsData = response.data.map((item: any) => {
+            const template = analyticsStatsTemplate.find(t => t.key === item.key)
+            
+            // Calculate delta from the data
+            const data = item.data || []
+            console.log(`📈 ${item.key} data:`, {
+              dataLength: data.length,
+              samplePoints: data.slice(0, 3),
+              lastPoint: data[data.length - 1]
+            });
+            
+            console.log(`📊 ${item.key}:`, {
+              value: item.value,
+              dataPoints: data.length
+            });
+            
+            return {
+              ...template,
+              value: item.value,
+              delta: '0%', // No percentages
+              data: item.data
+            }
+          })
+          
+          // Debug final state
+          console.log('📋 Final analyticsStats:', analyticsData.map((d: any) => ({
+            key: d.key,
+            value: d.value,
+            dataLength: d.data?.length
+          })));
+          
+          setAnalyticsStats(analyticsData)
+          setAnalyticsMetadata(response.metadata)
+          
+          // Store last fetch timestamp for daily refresh tracking
+          localStorage.setItem('hubspot_analytics_last_fetch', new Date().toISOString())
+          
+          console.log('✅ HubSpot analytics processed:', analyticsData.map((d: any) => ({
+            key: d.key,
+            value: d.value,
+            dataPoints: d.data?.length || 0
+          })));
+          console.log('📊 Metadata:', response.metadata)
+        } else {
+          throw new Error('HubSpot API returned unsuccessful response')
+        }
+      } catch (error) {
+        console.error('❌ Error fetching HubSpot analytics:', error)
+        // Fall back to template with zero values
+        setAnalyticsStats(analyticsStatsTemplate.map(template => ({
+          ...template,
+          value: '£0',
+          delta: '0%', // No percentages
+          data: Array.from({ length: 12 }, (_, i) => ({ value: 0, name: `Month ${i + 1}` }))
+        })))
+        setAnalyticsMetadata(null)
+      } finally {
+        setAnalyticsStatsLoading(false)
+      }
+    }
+
+    // Check if we need to refresh based on last fetch time
+    const checkForDailyRefresh = () => {
+      const lastFetch = localStorage.getItem('hubspot_analytics_last_fetch')
+      if (!lastFetch) {
+        console.log('🔄 No previous fetch found - loading analytics data')
+        fetchHubSpotAnalytics()
+        return
+      }
+
+      const lastFetchTime = new Date(lastFetch)
+      const now = new Date()
+      const hoursSinceLastFetch = (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
+      
+      console.log('⏰ Hours since last HubSpot fetch:', hoursSinceLastFetch.toFixed(1))
+      
+      if (hoursSinceLastFetch >= 24) {
+        console.log('🔄 Daily refresh needed - fetching fresh HubSpot data')
+        fetchHubSpotAnalytics(true) // Force refresh for daily update
+      } else {
+        console.log('✅ Analytics data is still fresh - no refresh needed')
+        fetchHubSpotAnalytics() // Regular fetch (may use cache)
+      }
+    }
+
+    // Initial check
+    checkForDailyRefresh()
+
+    // Set up daily interval to check for updates (every hour)
+    const dailyRefreshInterval = setInterval(() => {
+      console.log('⏱️ Checking if daily analytics refresh is needed...')
+      const lastFetch = localStorage.getItem('hubspot_analytics_last_fetch')
+      if (lastFetch) {
+        const lastFetchTime = new Date(lastFetch)
+        const now = new Date()
+        const hoursSinceLastFetch = (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
+        
+        if (hoursSinceLastFetch >= 24) {
+          console.log('🔄 Daily refresh triggered - updating HubSpot analytics')
+          fetchHubSpotAnalytics(true)
+        }
+      }
+    }, 60 * 60 * 1000) // Check every hour
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(dailyRefreshInterval)
+    }
+  }, []) // Only run once on mount, not on date changes
+
+  // Manual refresh function
+  const handleAnalyticsRefresh = () => {
+    console.log('🔄 Manual refresh triggered')
+    const fetchHubSpotAnalytics = async () => {
+      try {
+        setAnalyticsStatsLoading(true)
+        
+        console.log('🔄 Force refreshing HubSpot analytics...')
+        
+        const response = await supabaseAPI.getHubSpotAnalytics({
+          dateFrom: analyticsDateFrom || undefined,
+          dateTo: analyticsDateTo || undefined,
+          refresh: true
+        })
+        
+        if (response.success) {
+          const analyticsData = response.data.map((item: any) => {
+            const template = analyticsStatsTemplate.find(t => t.key === item.key)
+            
+            const data = item.data || []
+            
+            return {
+              ...template,
+              value: item.value,
+              delta: '0%', // No percentages
+              data: item.data
+            }
+          })
+          
+          setAnalyticsStats(analyticsData)
+          setAnalyticsMetadata(response.metadata)
+          console.log('✅ HubSpot analytics refreshed successfully:', analyticsData.map((d: any) => ({
+            key: d.key,
+            value: d.value,
+            dataPoints: d.data?.length || 0
+          })))
+        }
+      } catch (error) {
+        console.error('❌ Error refreshing HubSpot analytics:', error)
+      } finally {
+        setAnalyticsStatsLoading(false)
+      }
+    }
+
+    fetchHubSpotAnalytics()
+  }
+
+  // Manual refresh function for Hours Lost
+  const handleHoursLostRefresh = () => {
+    console.log('🔄 Manual Hours Lost refresh triggered with filters:', { 
+      daysLostDateFrom, 
+      daysLostDateTo,
+      daysLostUserFilter,
+      daysLostModuleFilter 
+    })
+    
+    // Trigger re-fetch by updating a non-filter state to force useEffect re-run
+    setDaysLostLoading(true)
+    
+    // Use a timeout to allow the loading state to be set first
+    setTimeout(() => {
+      setDaysLostUserFilter(prev => prev) // This will trigger the useEffect
+    }, 10)
+  }
+
+  // Reset function for Hours Lost
+  const handleHoursLostReset = () => {
+    console.log('🔄 Hours Lost reset triggered - clearing all filters')
+    setDaysLostDateFrom('')
+    setDaysLostDateTo('')
+    setDaysLostUserFilter('All')
+    setDaysLostModuleFilter('All')
+    
+    // Trigger refresh with cleared filters
+    setTimeout(() => {
+      setDaysLostLoading(true)
+      setDaysLostUserFilter('All') // This will trigger the useEffect
+    }, 10)
+  }
+
+  // Manual refresh function for Forms
+  const handleFormsRefresh = () => {
+    console.log('🔄 Manual Forms refresh triggered with filters:', { 
+      formsDateFrom, 
+      formsDateTo,
+      formsModuleFilter,
+      formsPersonFilter 
+    })
+    
+    // Trigger re-calculation by updating a non-filter state to force useEffect re-run
+    setFormsStatsLoading(true)
+    
+    // Use a timeout to allow the loading state to be set first
+    setTimeout(() => {
+      setFormsModuleFilter(prev => prev) // This will trigger the useEffect
+    }, 10)
+  }
+
+  // Reset function for Forms
+  const handleFormsReset = () => {
+    console.log('🔄 Forms reset triggered - clearing all filters')
+    setFormsDateFrom('')
+    setFormsDateTo('')
+    setFormsModuleFilter('All')
+    setFormsPersonFilter('All')
+    
+    // Trigger refresh with cleared filters
+    setTimeout(() => {
+      setFormsStatsLoading(true)
+      setFormsModuleFilter('All') // This will trigger the useEffect
+    }, 10)
+  }
 
   // Set days lost data directly from the smart-filtered allDaysLostData
   useEffect(() => {
@@ -815,7 +1103,7 @@ export default function AnalyticsPage() {
                 Previous month: {previousValue} hours
               </p>
               <p className="text-xs text-gray-600">
-                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue} hours ({deltaPercent >= '0' ? '+' : ''}{deltaPercent}%)
+                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue} hours
               </p>
             </div>
           )}
@@ -861,7 +1149,7 @@ export default function AnalyticsPage() {
                 Previous month: {previousValue}
               </p>
               <p className="text-xs text-gray-600">
-                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue} ({deltaPercent >= '0' ? '+' : ''}{deltaPercent}%)
+                Change: {deltaValue >= 0 ? '+' : ''}{deltaValue}
               </p>
             </div>
           )}
@@ -875,13 +1163,19 @@ export default function AnalyticsPage() {
   const FormsTooltipWrapper = (stat: any) => (props: any) => <FormsStatsTooltip {...props} stat={stat} />
 
   const handleChartMouseMove = (stat: any, e: any) => {
-    if (!e || !e.activeLabel) return
+    if (!e || !e.activeLabel) {
+      console.log('🚫 No activeLabel - clearing hover');
+      setLastHovered(null)
+      return
+    }
     const data = stat.data || []
     const dataPoint = getNearestDataPoint(data, d => d.name, e.activeLabel)
-    setLastHovered({ stat, dataPoint })
+    console.log(`🎯 HOVER: ${stat.key} -> ${e.activeLabel} (${dataPoint?.value})`);
+    setLastHovered({ stat, dataPoint, isActive: true })
   }
 
   const handleChartMouseLeave = () => {
+    console.log('🚶 Mouse LEFT chart - clearing hover state');
     setLastHovered(null)
   }
 
@@ -1458,7 +1752,8 @@ export default function AnalyticsPage() {
   };
 
 return (
-  <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8" ref={chartContainerRef}>
+  <AdminOnly>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8" ref={chartContainerRef}>
     {/* Breadcrumb */}
     <div className="text-sm text-gray-400 font-inter mb-2 flex items-center gap-2">
       <span className="text-gray-700 font-medium">Dashboard</span>
@@ -1543,13 +1838,58 @@ return (
               onChange={(e) => setDaysLostDateTo(e.target.value)}
               className="h-[36px] w-[140px] rounded-[8px] border border-[#E5E7EB] bg-white pl-4 pr-4 text-[14px] font-inter font-normal text-[#27293759] focus:text-[#272937] focus:outline-none" 
             />
+            
+            {/* Apply Filters Button */}
+            <button
+              onClick={() => handleHoursLostRefresh()}
+              disabled={daysLostLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Apply date filters"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Apply
+            </button>
+            
+            {/* Reset Button */}
+            <button
+              onClick={() => handleHoursLostReset()}
+              disabled={daysLostLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Reset all filters"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset
+            </button>
           </div>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
         {(showMoreHoursLost ? reasons : reasons.slice(0, 3)).map((reason, i) => {
           const data = daysLostData?.[reason.key] || []
-          const last = data.at(-1) || { value: 0, formsCount: 0 }
+          // Calculate total for the period instead of just the last value
+          const totalValue = data.reduce((sum: number, item: any) => sum + (item.value || 0), 0)
+          const totalFormsCount = data.reduce((sum: number, item: any) => sum + (item.formsCount || 0), 0)
+          const last = { value: totalValue, formsCount: totalFormsCount }
+          
+          // console.log(`📊 Hours Lost ${reason.key}: ${totalValue}`);
           return (
             <div key={i} className="bg-[#FFF6F4] rounded-xl p-4 sm:p-6 flex flex-col gap-3 min-h-[200px] sm:min-h-[220px] relative">
               {/* Mini 'view' link */}
@@ -1700,6 +2040,46 @@ return (
               onChange={(e) => setFormsDateTo(e.target.value)}
               className="h-[36px] w-[140px] rounded-[8px] border border-[#E5E7EB] bg-white pl-4 pr-4 text-[14px] font-inter font-normal text-[#27293759] focus:text-[#272937] focus:outline-none" 
             />
+            
+            {/* Apply Filters Button */}
+            <button
+              onClick={() => handleFormsRefresh()}
+              disabled={formsStatsLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Apply date filters"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Apply
+            </button>
+            
+            {/* Reset Button */}
+            <button
+              onClick={() => handleFormsReset()}
+              disabled={formsStatsLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Reset all filters"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset
+            </button>
           </div>
         </div>
       </div>
@@ -1740,10 +2120,7 @@ return (
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-[28px] font-semibold" style={{ color: stat.chart === 'green' ? '#131B33' : stat.chart === 'orange' ? '#131B33' : '#131B33' }}>{stat.value}</span>
-                <span className={`inline-flex items-center gap-1 ${stat.chart === 'green' ? 'bg-[#E9F9E4] text-[#4FC62B]' : stat.chart === 'orange' ? 'bg-[#FFF6E4] text-[#FFB800]' : 'bg-[#F1F0FF] text-[#7B61FF]'} text-xs font-semibold rounded-full px-3 py-1`}>
-                  <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M2 8l4-4 4 4" stroke={stat.chart === 'green' ? '#4FC62B' : stat.chart === 'orange' ? '#FFB800' : '#7B61FF'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M7 4v6" stroke={stat.chart === 'green' ? '#4FC62B' : stat.chart === 'orange' ? '#FFB800' : '#7B61FF'} strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  {stat.delta}
-                </span>
+                {/* Removed percentage display */}
               </div>
               {/* Recharts AreaChart */}
               <div className="w-full h-36 mt-4"
@@ -1788,6 +2165,199 @@ return (
               </div>
             </div>
           ))
+        )}
+      </div>
+    </div>
+    
+    {/* Analytics Section */}
+    <div className="bg-white rounded-2xl p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 sm:gap-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg sm:text-xl font-semibold font-inter">Analytics</h2>
+            <span className="bg-[#F2F2F2] text-[#272937] text-xs font-medium font-inter rounded px-3 py-1">
+              Performance Metrics
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 font-inter">
+            Track negotiations and wins over time
+            {analyticsMetadata && (
+              <span className="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">
+                {analyticsMetadata.granularity || 'monthly'} view • {analyticsMetadata.historicalDataPoints || 0} data points
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Mobile filter button */}
+          <button
+            onClick={() => setAnalyticsFilterDrawerOpen(true)}
+            className="sm:hidden flex items-center gap-2 bg-white border border-[#E5E7EB] text-gray-700 font-medium rounded-lg px-4 py-3 hover:bg-gray-50 transition-colors"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span className="text-base">Filters</span>
+            {(analyticsDateFrom || analyticsDateTo) && (
+              <span className="bg-[#FF6551] text-white text-xs rounded-full px-2 py-0.5 ml-1">
+                {[analyticsDateFrom, analyticsDateTo].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+
+          {/* Desktop filter controls */}
+          <div className="hidden sm:flex gap-3">
+            {/* Date Range */}
+            <input 
+              type="date" 
+              value={analyticsDateFrom}
+              onChange={(e) => setAnalyticsDateFrom(e.target.value)}
+              placeholder="From date"
+              className="h-[36px] w-[140px] rounded-[8px] border border-[#E5E7EB] bg-white pl-4 pr-4 text-[14px] font-inter font-normal text-[#27293759] focus:text-[#272937] focus:outline-none" 
+            />
+            <input 
+              type="date"
+              value={analyticsDateTo}
+              onChange={(e) => setAnalyticsDateTo(e.target.value)}
+              placeholder="To date"
+              className="h-[36px] w-[140px] rounded-[8px] border border-[#E5E7EB] bg-white pl-4 pr-4 text-[14px] font-inter font-normal text-[#27293759] focus:text-[#272937] focus:outline-none" 
+            />
+            
+            {/* Apply Filters Button */}
+            <button
+              onClick={() => handleAnalyticsRefresh()}
+              disabled={analyticsStatsLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Apply date filters"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Apply
+            </button>
+            
+            {/* Refresh Button */}
+            <button
+              onClick={handleAnalyticsRefresh}
+              disabled={analyticsStatsLoading}
+              className="h-[36px] px-4 rounded-[8px] border border-[#E5E7EB] bg-white text-[#272937] font-medium text-[14px] font-inter hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Refresh HubSpot data"
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                viewBox="0 0 24 24"
+                className={analyticsStatsLoading ? 'animate-spin' : ''}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {analyticsStatsLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+        {analyticsStatsLoading ? (
+          // Loading skeleton
+          analyticsStatsTemplate.map((template, i) => (
+            <div key={i} className="rounded-xl p-4 sm:p-6 flex flex-col gap-3 min-h-[200px] sm:min-h-[220px] relative animate-pulse" style={{ background: template.chart === 'blue' ? '#F0F7FF' : '#F0FDF4' }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {template.icon}
+                  <span className="text-[15px] font-medium" style={{ color: '#131B33' }}>{template.label}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+              <div className="w-full h-36 mt-4 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          ))
+        ) : (
+          analyticsStats.map((stat, i) => {
+            // Clean state
+            
+            return (
+            <div key={i} className="rounded-xl p-4 sm:p-6 flex flex-col gap-3 min-h-[200px] sm:min-h-[220px] relative" style={{ background: stat.chart === 'blue' ? '#F0F7FF' : '#F0FDF4' }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {stat.icon}
+                  <span className="text-[15px] font-medium" style={{ color: '#131B33' }}>{stat.label}</span>
+                </div>
+                <span className={stat.deltaColor}>{/* right icon placeholder */}</span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-[28px] font-semibold" style={{ color: '#131B33' }}>
+                  {(() => {
+                    // Always show the main stat value (no hover interference)
+                    return stat.value;
+                  })()
+                  }
+                </span>
+                <span className="text-xs text-gray-500">
+                  {(() => {
+                    // Show the actual last data point date from the chart data
+                    const lastDataPoint = stat.data && stat.data.length > 0 ? stat.data[stat.data.length - 1] : null;
+                    const endDate = lastDataPoint ? lastDataPoint.name : 'Sept 25';
+                    
+                    if (analyticsDateTo || analyticsDateFrom) {
+                      return `as of ${endDate}`;
+                    } else {
+                      return `as of ${endDate}`;
+                    }
+                  })()
+                  }
+                </span>
+              </div>
+              {/* Recharts AreaChart */}
+              <div className="w-full h-36 mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={stat.data}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 35 }}
+                    onMouseMove={e => handleChartMouseMove(stat, e)}
+                    onMouseLeave={handleChartMouseLeave}
+                  >
+                    <defs>
+                      <linearGradient id="blueArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563EB" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="successArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10B981" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 10, fill: '#666' }} 
+                      axisLine={false}
+                      interval="preserveStartEnd"
+                      height={25}
+                      tickMargin={5}
+                      angle={0}
+                    />
+                    <YAxis hide />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="value" stroke={stat.stroke} fill={stat.fill} strokeWidth={2} dot={{ r: 4, fill: 'transparent', stroke: 'transparent' }} isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            );
+          })
         )}
       </div>
     </div>
@@ -1954,7 +2524,35 @@ return (
         setFormsDateFrom('')
         setFormsDateTo('')
       }}
-        />
-  </div>
+    />
+
+    {/* Analytics Filter Drawer */}
+    <FilterDrawer
+      isOpen={analyticsFilterDrawerOpen}
+      onClose={() => setAnalyticsFilterDrawerOpen(false)}
+      title="Date Range Filters"
+      filters={[
+        {
+          key: 'dateFrom',
+          value: analyticsDateFrom,
+          onChange: setAnalyticsDateFrom,
+          type: 'date',
+          placeholder: 'From Date'
+        },
+        {
+          key: 'dateTo',
+          value: analyticsDateTo,
+          onChange: setAnalyticsDateTo,
+          type: 'date',
+          placeholder: 'To Date'
+        }
+      ]}
+      onClearAll={() => {
+        setAnalyticsDateFrom('')
+        setAnalyticsDateTo('')
+      }}
+        />  
+    </div>
+  </AdminOnly>
 )
 }
