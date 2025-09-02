@@ -330,7 +330,7 @@ export async function GET(request: NextRequest) {
     const closedWonDeals = closedWonResponse.results || [];
 
     console.log(`📊 Found ${advancedNegotiationsDeals.length} advanced negotiations deals, ${closedWonDeals.length} closed won deals`);
-    console.log('💰 Closed won deals sample:', closedWonDeals.slice(0, 2).map(deal => ({
+    console.log('💰 Closed won deals sample:', closedWonDeals.slice(0, 2).map((deal: any) => ({
       id: deal.id,
       name: deal.properties?.dealname,
       amount: deal.properties?.amount,
