@@ -35,7 +35,7 @@ function getHubSpotClient() {
 
 // Calculate total amount from HubSpot deals
 function calculateTotalAmount(deals: any[]): number {
-  return deals.reduce((total, deal) => {
+  return deals.reduce((total: number, deal: any) => {
     const amount = parseFloat(deal.properties.amount || '0');
     return total + (isNaN(amount) ? 0 : amount);
   }, 0);
@@ -348,7 +348,7 @@ export async function GET(request: NextRequest) {
 
     if (currentClosedWonAmount === 0 && closedWonDeals.length > 0) {
       console.warn('⚠️ Found closed won deals but total amount is 0. Checking deal amounts...');
-      closedWonDeals.forEach((deal, i) => {
+      closedWonDeals.forEach((deal: any, i) => {
         console.log(`Deal ${i + 1}:`, {
           amount: deal.properties?.amount,
           parsed: parseFloat(deal.properties?.amount || '0'),
@@ -590,12 +590,12 @@ export async function GET(request: NextRequest) {
       }
       
       // Sum all closed won amounts for the period (this IS money flow, so sum makes sense)
-      periodClosedWonTotal = filteredChartData.reduce((sum, item) => 
+      periodClosedWonTotal = filteredChartData.reduce((sum: number, item: any) => 
         sum + (item.closedWon || 0), 0);
     } else {
       // No filters - show current amount for advanced negotiations  
       periodAdvancedTotal = currentAdvancedAmount;
-      periodClosedWonTotal = filteredChartData.reduce((sum, item) => sum + (item.closedWon || 0), 0);
+      periodClosedWonTotal = filteredChartData.reduce((sum: number, item: any) => sum + (item.closedWon || 0), 0);
     }
 
 
@@ -666,7 +666,7 @@ export async function GET(request: NextRequest) {
         historicalDataPoints: filteredChartData.length,
         granularity,
         filtersApplied: { dateFrom, dateTo },
-        historicalClosedWonTotal: historicalClosedWon.reduce((sum, item) => sum + item.totalAmount, 0),
+        historicalClosedWonTotal: historicalClosedWon.reduce((sum: number, item: any) => sum + item.totalAmount, 0),
         dataRange: {
           start: filteredChartData[0]?.month || chartData[0]?.month,
           end: filteredChartData[filteredChartData.length - 1]?.month || chartData[chartData.length - 1]?.month
