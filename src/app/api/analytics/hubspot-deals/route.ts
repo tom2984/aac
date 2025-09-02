@@ -271,27 +271,58 @@ async function generateWeeklyData(
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 Starting HubSpot analytics API request...');
+    
+    // Check environment variables first
+    console.log('🔍 Checking environment variables...');
+    const envCheck = {
+      SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      SUPABASE_ANON_KEY: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_KEY: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+      HUBSPOT_API_KEY: !!process.env.HUBSPOT_API_KEY
+    };
+    console.log('🔍 Environment variables status:', envCheck);
+    
+    console.log('🔍 Creating Supabase clients...');
     const { supabase, supabaseAdmin } = getSupabaseClients();
+    console.log('🔍 Supabase clients created successfully');
+    
+    console.log('🔍 Creating HubSpot client...');
     const hubspotClient = getHubSpotClient();
+    console.log('🔍 HubSpot client created successfully');
 
     // Get user from Authorization header
+    console.log('🔍 Starting authentication check...');
     const authHeader = request.headers.get('authorization')
     let currentUser = null
     let currentUserProfile = null
     
     if (authHeader) {
+      console.log('🔍 Found auth header, validating token...');
       const token = authHeader.replace('Bearer ', '')
       const { data: { user }, error: authError } = await supabase.auth.getUser(token)
       
+      if (authError) {
+        console.log('❌ Auth error:', authError);
+      }
+      
       if (!authError && user) {
+        console.log('🔍 User authenticated:', user.email);
         currentUser = user
         
         // Get user profile with admin privileges (to check role and relationships)
-        const { data: profile } = await supabaseAdmin
+        console.log('🔍 Fetching user profile...');
+        const { data: profile, error: profileError } = await supabaseAdmin
           .from('profiles')
           .select('id, role, invited_by, first_name, last_name, email')
           .eq('id', user.id)
           .single()
+          
+        if (profileError) {
+          console.log('❌ Profile fetch error:', profileError);
+        } else {
+          console.log('🔍 Profile fetched:', { role: profile?.role, email: profile?.email });
+        }
           
         currentUserProfile = profile
       }
@@ -323,10 +354,18 @@ export async function GET(request: NextRequest) {
     });
 
     // Get current live data from HubSpot
-    const [advancedNegotiationsResponse, closedWonResponse] = await Promise.all([
-      hubspotClient.getAdvancedNegotiationsDeals(),
-      hubspotClient.getClosedWonDeals()
-    ]);
+    console.log('🔍 Fetching current HubSpot deals data...');
+    let advancedNegotiationsResponse, closedWonResponse;
+    try {
+      [advancedNegotiationsResponse, closedWonResponse] = await Promise.all([
+        hubspotClient.getAdvancedNegotiationsDeals(),
+        hubspotClient.getClosedWonDeals()
+      ]);
+      console.log('🔍 HubSpot API calls completed successfully');
+    } catch (hubspotError) {
+      console.log('❌ HubSpot API error:', hubspotError);
+      throw hubspotError;
+    }
 
     const advancedNegotiationsDeals = advancedNegotiationsResponse.results || [];
     const closedWonDeals = closedWonResponse.results || [];
