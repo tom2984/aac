@@ -207,7 +207,7 @@ async function generateWeeklyData(
       });
       
     } catch (error) {
-      console.warn('⚠️ Failed to fetch weekly data for week', weekNumber, ':', error.message);
+      console.warn('⚠️ Failed to fetch weekly data for week', weekNumber, ':', error instanceof Error ? error.message : String(error));
       
       // Add placeholder data
       const weekRatio = Math.min(1, (currentDate.getTime() - startDate.getTime()) / (endDate.getTime() - startDate.getTime()));
@@ -365,7 +365,7 @@ export async function GET(request: NextRequest) {
       historicalClosedWon = await hubspotClient.getHistoricalClosedWonData(12);
       console.log('✅ Historical data fetched successfully:', historicalClosedWon?.length || 0, 'months');
     } catch (error) {
-      console.warn('⚠️ Failed to fetch historical data, using fallback:', error.message);
+      console.warn('⚠️ Failed to fetch historical data, using fallback:', error instanceof Error ? error.message : String(error));
       // Fallback: generate 12 months of data with current closed won amount
       historicalClosedWon = [];
       const now = new Date();
@@ -677,7 +677,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('❌ HubSpot analytics API error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch HubSpot data' },
+      { error: (error instanceof Error ? error.message : String(error)) || 'Failed to fetch HubSpot data' },
       { status: 500 }
     );
   }
