@@ -27,11 +27,25 @@ function AcceptInviteForm() {
     const validateInvite = async () => {
       // Check for token first (new secure system)
       const token = searchParams.get('token');
+      console.log('🎯 Raw token from URL:', token);
+      console.log('🎯 Token length:', token?.length);
       
       if (token) {
         try {
           // Validate token and get invite data
           console.log('🔍 Validating token:', token.substring(0, 8) + '...');
+          console.log('🔍 Current time:', new Date().toISOString());
+          
+          // First check if token exists at all
+          const { data: tokenCheck, error: tokenCheckError } = await supabase
+            .from('invite_tokens')
+            .select('*')
+            .eq('token', token)
+            .single();
+          
+          console.log('📊 Token exists check:', { tokenCheck, tokenCheckError });
+          
+          // Then check with all conditions
           const { data: invite, error: inviteError } = await supabase
             .from('invite_tokens')
             .select('*')
@@ -41,9 +55,29 @@ function AcceptInviteForm() {
             .single();
 
           console.log('📊 Token validation result:', { invite, inviteError });
+          
+          if (tokenCheck && !invite) {
+            console.log('🔍 Token found but failed validation:');
+            console.log('  - Status:', tokenCheck.status);
+            console.log('  - Expires at:', tokenCheck.expires_at);
+            console.log('  - Current time:', new Date().toISOString());
+          }
 
           if (inviteError || !invite) {
-            console.error('❌ Token validation failed:', inviteError);
+            console.error('❌ Token validation failed:');
+            console.error('  - inviteError:', inviteError);
+            console.error('  - invite data:', invite);
+            console.error('  - Error code:', inviteError?.code);
+            console.error('  - Error message:', inviteError?.message);
+            
+            if (tokenCheck) {
+              console.error('❌ Token exists but validation failed. Possible reasons:');
+              console.error('  - Token status:', tokenCheck.status, '(should be: pending)');
+              console.error('  - Token expires:', tokenCheck.expires_at);
+              console.error('  - Current time:', new Date().toISOString());
+              console.error('  - Time comparison:', new Date(tokenCheck.expires_at) > new Date());
+            }
+            
             setInviteValid(false);
             setError('Invalid or expired invitation link.');
             return;
