@@ -162,66 +162,37 @@ function AcceptInviteForm() {
     setLoading(true);
     setError('');
 
-    try {
-      // 1. Sign up the user with Supabase Auth (auto-confirm for invited users)
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          data: {
-            first_name: firstName,
-            last_name: lastName,
+      try {
+        // 1. Create user account via API (bypasses email confirmation for invited users)
+        const signupResponse = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
             role: inviteData?.role || 'employee',
-            invited_via_token: true
-          }
-        }
-      });
-
-      if (authError) {
-        throw new Error(authError.message);
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user account');
-      }
-
-      // 2. Create a profile for the new user with proper invite relationship
-      const profileData = {
-        id: authData.user.id,
-        email: authData.user.email,
-        first_name: firstName,
-        last_name: lastName,
-        role: inviteData?.role || 'employee',
-        status: 'active',
-        ...(inviteData?.invited_by && { invited_by: inviteData.invited_by })
-      };
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert(profileData);
-
-      if (profileError) {
-        throw new Error('Failed to create profile: ' + profileError.message);
-      }
-
-      // 3. Mark the invite token as accepted (if using token-based system)
-      if (inviteData) {
-        const { error: tokenUpdateError } = await supabase
-          .from('invite_tokens')
-          .update({
-            status: 'accepted',
-            accepted_at: new Date().toISOString()
+            inviteToken: token,
+            skipEmailConfirmation: true
           })
-          .eq('id', inviteData.id);
+        });
 
-        if (tokenUpdateError) {
-          console.error('Warning: Failed to update invite token status:', tokenUpdateError);
-          // Don't fail the whole process for this
+        if (!signupResponse.ok) {
+          const errorData = await signupResponse.json();
+          throw new Error(errorData.error || 'Failed to create account');
         }
-      }
 
-      // 4. Role-based redirect after account creation
+        const { user: authData } = await signupResponse.json();
+
+        if (!authData) {
+          throw new Error('Failed to create user account');
+        }
+
+      // 2. Role-based redirect after account creation
+      // Note: Profile and token handling is done by the custom signup API
       if (inviteData?.role === 'employee') {
         // Get current session to help mobile app with authentication
         const { data: { session } } = await supabase.auth.getSession();

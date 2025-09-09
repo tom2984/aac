@@ -1,16 +1,24 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 
 function getSupabaseClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
   
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    throw new Error('Missing required Supabase environment variables')
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Missing Supabase public environment variables')
   }
-
+  
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_KEY environment variable')
+  }
+  
+  // Regular client for auth
   const supabase = createClient(supabaseUrl, anonKey)
+  
+  // Service role client for admin operations (bypasses RLS)
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -18,17 +26,29 @@ function getSupabaseClients() {
     }
   })
   
-
-  
   return { supabase, supabaseAdmin }
 }
 
+function getResendClient() {
+  const resendApiKey = process.env.RESEND_API_KEY
+  
+  if (!resendApiKey) {
+    throw new Error('Missing RESEND_API_KEY environment variable')
+  }
+  
+  return new Resend(resendApiKey)
+}
 
 export async function POST(request: Request) {
   try {
     const { supabase, supabaseAdmin } = getSupabaseClients()
+    const resend = getResendClient()
     
-    const { emails, role = 'employee', forceResend = false } = await request.json()
+    // Test Resend configuration
+    console.log('📧 Resend API Key present:', !!process.env.RESEND_API_KEY)
+    console.log('📧 Resend API Key length:', process.env.RESEND_API_KEY?.length || 0)
+    
+    const { emails, role = 'employee' } = await request.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json({ error: 'Emails array is required' }, { status: 400 })
@@ -40,8 +60,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
     }
 
-    const authToken = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(authToken)
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized: User not authenticated' }, { status: 401 })
@@ -74,57 +94,34 @@ export async function POST(request: Request) {
           throw new Error('Failed to generate invite token')
         }
 
-        const inviteToken = tokenData
+        const token = tokenData
 
-        // Handle existing invitations based on forceResend flag
-        if (forceResend) {
-          console.log('🔄 FORCE RESEND enabled for:', email, '- clearing existing invites')
-          
-          // Delete any existing pending invitations for this email
-          const { error: deleteError } = await supabaseAdmin
-            .from('invite_tokens')
-            .delete()
-            .eq('email', email)
-            .eq('status', 'pending')
-          
-          if (deleteError) {
-            console.error('❌ Error deleting existing invites for', email, ':', deleteError)
-            // Continue anyway - don't fail the whole process
-          } else {
-            console.log('✅ Cleared existing pending invites for:', email)
-          }
-        } else {
-          // Normal flow - check for existing invites and skip if found
-          const { data: existingInvite, error: checkError } = await supabaseAdmin
-            .from('invite_tokens')
-            .select('id, status')
-            .eq('email', email)
-            .eq('status', 'pending')
-            .single()
+        // Check if there's already a pending invitation for this email (service role)
+        const { data: existingInvite, error: checkError } = await supabaseAdmin
+          .from('invite_tokens')
+          .select('id, status')
+          .eq('email', email)
+          .eq('status', 'pending')
+          .single()
 
-          if (checkError && checkError.code !== 'PGRST116') {
-            throw new Error('Error checking existing invitations')
-          }
-
-          if (existingInvite) {
-            console.log('⚠️ SKIPPING:', email, '- invitation already pending with ID:', existingInvite.id)
-            results.push({
-              email,
-              status: 'skipped',
-              message: 'Invitation already pending for this email'
-            })
-            continue
-          }
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw new Error('Error checking existing invitations')
         }
-        
-        console.log('✅ Proceeding to create invite for:', email)
+
+        if (existingInvite) {
+          results.push({
+            email,
+            status: 'skipped',
+            message: 'Invitation already pending for this email'
+          })
+          continue
+        }
 
         // Create invite token record (service role)
-        console.log('💾 Creating invite record with token:', inviteToken.substring(0, 8) + '...')
         const { data: inviteRecord, error: inviteError } = await supabaseAdmin
           .from('invite_tokens')
           .insert({
-            token: inviteToken,
+            token,
             email,
             invited_by: user.id, // Use the authenticated user's ID
             role,
@@ -134,85 +131,96 @@ export async function POST(request: Request) {
           .single()
 
         if (inviteError) {
-          console.error('❌ Failed to create invite record:', inviteError)
-          throw new Error('Failed to create invite record: ' + inviteError.message)
+          throw new Error('Failed to create invite record')
         }
-        
-        console.log('✅ Invite record created successfully:', inviteRecord.id)
 
         // Create the invitation link with proper domain
-        console.log('🌐 Environment variables:');
-        console.log('  - NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL || 'MISSING');
-        console.log('  - SITE_URL:', process.env.SITE_URL || 'MISSING');
-        console.log('  - VERCEL_URL:', process.env.VERCEL_URL || 'MISSING');
-        
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
-                       process.env.SITE_URL ||
-                       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-        const inviteLink = `${baseUrl}/accept-invite?token=${inviteToken}`
-        
-        console.log('🔗 Selected baseUrl:', baseUrl);
-        console.log('🔗 Generated invitation link:', inviteLink.substring(0, 50) + '...')
+                       process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
+                       'http://localhost:3000'
+        const inviteLink = `${baseUrl}/accept-invite?token=${token}`
 
-        // Send email using Make.com
+        // Send email using Resend
         try {
-          console.log('📧 Sending invitation email to:', email, 'with role:', role)
-          console.log('🔍 Environment variables check:')
-          console.log('  - MAKE_EMPLOYEE_WEBHOOK_URL:', process.env.MAKE_EMPLOYEE_WEBHOOK_URL ? 'SET' : 'MISSING')
-          console.log('  - MAKE_ADMIN_WEBHOOK_URL:', process.env.MAKE_ADMIN_WEBHOOK_URL ? 'SET' : 'MISSING')
+          console.log('🔑 About to send email with Resend API key:', process.env.RESEND_API_KEY ? 'Found' : 'Missing')
+          console.log('📧 Sending email to:', email)
           
-          // Choose webhook URL based on role
-          const webhookUrl = role === 'employee' 
-            ? process.env.MAKE_EMPLOYEE_WEBHOOK_URL 
-            : process.env.MAKE_ADMIN_WEBHOOK_URL
-          
-          console.log('🎯 Selected webhook URL for role', role, ':', webhookUrl ? 'FOUND' : 'MISSING')
-          
-          if (!webhookUrl) {
-            throw new Error(`Missing webhook URL for role: ${role}`)
-          }
-          
-          const emailPayload = {
-            email: email,
-            adminName: adminName,
-            role: role,
-            inviteLink: inviteLink
-          }
-          
-          const emailResult = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(emailPayload)
+          const emailResult = await resend.emails.send({
+            from: 'AAC Team <info@aacflatroofing.co.uk>',
+            to: [email], // Resend prefers array format
+            subject: `You're invited to join the AAC team!`,
+            html: `
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <meta charset="utf-8">
+                  <title>Team Invitation</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #FF6551; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+                    .button { display: inline-block; background: #FF6551; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+                    .footer { margin-top: 30px; font-size: 14px; color: #666; }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="header">
+                      <h1>Welcome to AAC!</h1>
+                    </div>
+                    <div class="content">
+                      <h2>You've been invited to join our team</h2>
+                      <p>Hi there!</p>
+                      <p><strong>${adminName}</strong> has invited you to join the AAC form management system as ${role === 'admin' ? 'an administrator' : 'a team member'}.</p>
+                      
+                      <p>To get started, click the button below to create your account:</p>
+                      
+                      <a href="${inviteLink}" class="button">Accept Invitation</a>
+                      
+                      <p>Or copy and paste this link into your browser:</p>
+                      <p style="word-break: break-all; background: #e9e9e9; padding: 10px; border-radius: 4px;">${inviteLink}</p>
+                      
+                      <div class="footer">
+                        <p><strong>What happens next?</strong></p>
+                        <ul>
+                          <li>Create your account using the link above</li>
+                          <li>Complete your profile information</li>
+                          <li>${role === 'admin' ? 'Access the admin dashboard to manage forms and team members' : 'Download the mobile app to complete assigned forms'}</li>
+                        </ul>
+                        
+                        <p>If you have any questions, please contact ${adminName} or your system administrator.</p>
+                        <p><em>This invitation will expire in 7 days for security reasons.</em></p>
+                      </div>
+                    </div>
+                  </div>
+                </body>
+              </html>
+            `
           })
-          
-          if (!emailResult.ok) {
-            throw new Error(`Make.com webhook failed: ${emailResult.status} ${emailResult.statusText}`)
-          }
-          
-          // Make.com typically returns plain text like "Accepted", not JSON
-          const makeResponse = await emailResult.text()
-          console.log('✅ Email sent via Make.com:', makeResponse)
+
+          console.log('✅ Email send result:', emailResult)
+          console.log('📧 Email ID:', emailResult.data?.id)
 
           results.push({
             email,
             status: 'success',
-            inviteLink,
-            message: 'Invitation email sent successfully via Make.com'
+            emailId: emailResult.data?.id,
+            inviteLink, // Still provide link as backup
+            message: 'Invitation email sent successfully'
           })
 
         } catch (emailError) {
           // If email sending fails, still return the link for manual sending
-          console.error('❌ Make.com webhook failed for', email, ':', emailError)
+          console.error('❌ Email sending failed for', email, ':', emailError)
           console.error('❌ Error details:', JSON.stringify(emailError, null, 2))
           
           results.push({
             email,
             status: 'email_failed',
             inviteLink,
-            message: 'Invite created but email sending via Make.com failed. Please send the link manually.',
-            error: emailError instanceof Error ? emailError.message : 'Unknown webhook error'
+            message: 'Invite created but email sending failed. Please send the link manually.',
+            error: emailError instanceof Error ? emailError.message : 'Unknown email error'
           })
         }
 
@@ -248,6 +256,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.includes('Missing')) {
       return NextResponse.json({ error: 'Configuration error: ' + error.message }, { status: 500 })
     }
-    return NextResponse.json({ error: 'Failed to send invitations' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to process invitations' },
+      { status: 500 }
+    )
   }
-}
+} 
