@@ -26,8 +26,11 @@ function AcceptInviteForm() {
   useEffect(() => {
     const validateInvite = async () => {
       // Check for token first (new secure system)
-      const token = searchParams.get('token');
-      console.log('🎯 Raw token from URL:', token);
+      const rawToken = searchParams.get('token');
+      // Fix URL decoding issue: + characters in base64 tokens get decoded as spaces
+      const token = rawToken?.replace(/ /g, '+');
+      console.log('🎯 Raw token from URL:', rawToken);
+      console.log('🔧 Fixed token (spaces→+):', token);
       console.log('🎯 Token length:', token?.length);
       
       if (token) {
