@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   try {
     const { supabase, supabaseAdmin } = getSupabaseClients()
     
-    const { emails, role = 'employee' } = await request.json()
+    const { emails, role = 'employee', forceResend = false } = await request.json()
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json({ error: 'Emails array is required' }, { status: 400 })
@@ -81,29 +81,33 @@ export async function POST(request: Request) {
 
         const token = tokenData
 
-        // Check if there's already a pending invitation for this email (service role)
-        const { data: existingInvite, error: checkError } = await supabaseAdmin
-          .from('invite_tokens')
-          .select('id, status')
-          .eq('email', email)
-          .eq('status', 'pending')
-          .single()
+        // Check if there's already a pending invitation for this email (unless force resend)
+        if (!forceResend) {
+          const { data: existingInvite, error: checkError } = await supabaseAdmin
+            .from('invite_tokens')
+            .select('id, status')
+            .eq('email', email)
+            .eq('status', 'pending')
+            .single()
 
-        if (checkError && checkError.code !== 'PGRST116') {
-          throw new Error('Error checking existing invitations')
-        }
+          if (checkError && checkError.code !== 'PGRST116') {
+            throw new Error('Error checking existing invitations')
+          }
 
-        if (existingInvite) {
-          console.log('⚠️ SKIPPING:', email, '- invitation already pending with ID:', existingInvite.id)
-          results.push({
-            email,
-            status: 'skipped',
-            message: 'Invitation already pending for this email'
-          })
-          continue
+          if (existingInvite) {
+            console.log('⚠️ SKIPPING:', email, '- invitation already pending with ID:', existingInvite.id)
+            results.push({
+              email,
+              status: 'skipped',
+              message: 'Invitation already pending for this email'
+            })
+            continue
+          }
+        } else {
+          console.log('🔄 FORCE RESEND enabled for:', email, '- skipping duplicate check')
         }
         
-        console.log('✅ No existing invitation found for:', email, '- proceeding to create new invite')
+        console.log('✅ Proceeding to create invite for:', email)
 
         // Create invite token record (service role)
         const { data: inviteRecord, error: inviteError } = await supabaseAdmin
