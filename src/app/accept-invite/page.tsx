@@ -96,10 +96,19 @@ function AcceptInviteForm() {
     setError('');
 
     try {
-      // 1. Sign up the user with Supabase Auth
+      // 1. Sign up the user with Supabase Auth (auto-confirm for invited users)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            role: inviteData?.role || 'employee',
+            invited_via_token: true
+          }
+        }
       });
 
       if (authError) {
