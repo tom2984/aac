@@ -94,6 +94,7 @@ export async function POST(request: Request) {
         }
 
         if (existingInvite) {
+          console.log('⚠️ SKIPPING:', email, '- invitation already pending with ID:', existingInvite.id)
           results.push({
             email,
             status: 'skipped',
@@ -101,6 +102,8 @@ export async function POST(request: Request) {
           })
           continue
         }
+        
+        console.log('✅ No existing invitation found for:', email, '- proceeding to create new invite')
 
         // Create invite token record (service role)
         const { data: inviteRecord, error: inviteError } = await supabaseAdmin
