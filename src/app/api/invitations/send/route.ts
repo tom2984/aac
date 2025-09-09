@@ -40,8 +40,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const authToken = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authToken)
     
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized: User not authenticated' }, { status: 401 })
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
           throw new Error('Failed to generate invite token')
         }
 
-        const token = tokenData
+        const inviteToken = tokenData
 
         // Handle existing invitations based on forceResend flag
         if (forceResend) {
@@ -120,11 +120,11 @@ export async function POST(request: Request) {
         console.log('✅ Proceeding to create invite for:', email)
 
         // Create invite token record (service role)
-        console.log('💾 Creating invite record with token:', token.substring(0, 8) + '...')
+        console.log('💾 Creating invite record with token:', inviteToken.substring(0, 8) + '...')
         const { data: inviteRecord, error: inviteError } = await supabaseAdmin
           .from('invite_tokens')
           .insert({
-            token,
+            token: inviteToken,
             email,
             invited_by: user.id, // Use the authenticated user's ID
             role,
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
                        process.env.SITE_URL ||
                        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-        const inviteLink = `${baseUrl}/accept-invite?token=${token}`
+        const inviteLink = `${baseUrl}/accept-invite?token=${inviteToken}`
         
         console.log('🔗 Selected baseUrl:', baseUrl);
         console.log('🔗 Generated invitation link:', inviteLink.substring(0, 50) + '...')
