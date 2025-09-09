@@ -6,24 +6,19 @@ function getSupabaseClients() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
   
-  if (!supabaseUrl || !anonKey) {
-    throw new Error('Missing Supabase public environment variables')
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    throw new Error('Missing required Supabase environment variables')
   }
-  
-  if (!serviceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_KEY environment variable')
-  }
-  
-  // Regular client for auth
+
   const supabase = createClient(supabaseUrl, anonKey)
-  
-  // Service role client for admin operations (bypasses RLS)
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
     }
   })
+  
+
   
   return { supabase, supabaseAdmin }
 }
@@ -81,8 +76,25 @@ export async function POST(request: Request) {
 
         const token = tokenData
 
-        // Check if there's already a pending invitation for this email (unless force resend)
-        if (!forceResend) {
+        // Handle existing invitations based on forceResend flag
+        if (forceResend) {
+          console.log('🔄 FORCE RESEND enabled for:', email, '- clearing existing invites')
+          
+          // Delete any existing pending invitations for this email
+          const { error: deleteError } = await supabaseAdmin
+            .from('invite_tokens')
+            .delete()
+            .eq('email', email)
+            .eq('status', 'pending')
+          
+          if (deleteError) {
+            console.error('❌ Error deleting existing invites for', email, ':', deleteError)
+            // Continue anyway - don't fail the whole process
+          } else {
+            console.log('✅ Cleared existing pending invites for:', email)
+          }
+        } else {
+          // Normal flow - check for existing invites and skip if found
           const { data: existingInvite, error: checkError } = await supabaseAdmin
             .from('invite_tokens')
             .select('id, status')
@@ -103,8 +115,6 @@ export async function POST(request: Request) {
             })
             continue
           }
-        } else {
-          console.log('🔄 FORCE RESEND enabled for:', email, '- skipping duplicate check')
         }
         
         console.log('✅ Proceeding to create invite for:', email)
@@ -225,9 +235,6 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.includes('Missing')) {
       return NextResponse.json({ error: 'Configuration error: ' + error.message }, { status: 500 })
     }
-    return NextResponse.json(
-      { error: 'Failed to process invitations' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to send invitations' }, { status: 500 })
   }
-} 
+}
