@@ -86,6 +86,15 @@ function AcceptInviteForm() {
               
               // Provide specific error messages based on the issue
               if (tokenCheck.status === 'accepted') {
+                // In development, allow reusing accepted tokens for testing
+                if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+                  console.log('📧 DEVELOPMENT MODE: Allowing reuse of accepted token for testing');
+                  setInviteData(tokenCheck);
+                  setEmail(tokenCheck.email);
+                  setInviteValid(true);
+                  return;
+                }
+                
                 setInviteValid(false);
                 setError('This invitation has already been used. Please contact your administrator for a new invitation.');
                 return;
