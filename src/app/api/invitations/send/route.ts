@@ -120,6 +120,7 @@ export async function POST(request: Request) {
         console.log('✅ Proceeding to create invite for:', email)
 
         // Create invite token record (service role)
+        console.log('💾 Creating invite record with token:', token.substring(0, 8) + '...')
         const { data: inviteRecord, error: inviteError } = await supabaseAdmin
           .from('invite_tokens')
           .insert({
@@ -133,14 +134,19 @@ export async function POST(request: Request) {
           .single()
 
         if (inviteError) {
-          throw new Error('Failed to create invite record')
+          console.error('❌ Failed to create invite record:', inviteError)
+          throw new Error('Failed to create invite record: ' + inviteError.message)
         }
+        
+        console.log('✅ Invite record created successfully:', inviteRecord.id)
 
         // Create the invitation link with proper domain
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
                        process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
                        'http://localhost:3000'
         const inviteLink = `${baseUrl}/accept-invite?token=${token}`
+        
+        console.log('🔗 Generated invitation link:', inviteLink.substring(0, 50) + '...')
 
         // Send email using Make.com
         try {
