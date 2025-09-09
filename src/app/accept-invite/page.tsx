@@ -76,6 +76,26 @@ function AcceptInviteForm() {
               console.error('  - Token expires:', tokenCheck.expires_at);
               console.error('  - Current time:', new Date().toISOString());
               console.error('  - Time comparison:', new Date(tokenCheck.expires_at) > new Date());
+              
+              // Still set email and invite data for better UX even if validation fails
+              if (tokenCheck.email) {
+                console.log('📧 Setting email from token data:', tokenCheck.email);
+                setEmail(tokenCheck.email);
+                setInviteData(tokenCheck);
+              }
+              
+              // Provide specific error messages based on the issue
+              if (tokenCheck.status === 'accepted') {
+                setInviteValid(false);
+                setError('This invitation has already been used. Please contact your administrator for a new invitation.');
+                return;
+              }
+              
+              if (new Date(tokenCheck.expires_at) <= new Date()) {
+                setInviteValid(false);
+                setError('This invitation has expired. Please contact your administrator for a new invitation.');
+                return;
+              }
             }
             
             setInviteValid(false);
