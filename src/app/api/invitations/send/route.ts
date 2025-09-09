@@ -128,11 +128,16 @@ export async function POST(request: Request) {
         // Send email using Make.com
         try {
           console.log('📧 Sending invitation email to:', email, 'with role:', role)
+          console.log('🔍 Environment variables check:')
+          console.log('  - MAKE_EMPLOYEE_WEBHOOK_URL:', process.env.MAKE_EMPLOYEE_WEBHOOK_URL ? 'SET' : 'MISSING')
+          console.log('  - MAKE_ADMIN_WEBHOOK_URL:', process.env.MAKE_ADMIN_WEBHOOK_URL ? 'SET' : 'MISSING')
           
           // Choose webhook URL based on role
           const webhookUrl = role === 'employee' 
             ? process.env.MAKE_EMPLOYEE_WEBHOOK_URL 
             : process.env.MAKE_ADMIN_WEBHOOK_URL
+          
+          console.log('🎯 Selected webhook URL for role', role, ':', webhookUrl ? 'FOUND' : 'MISSING')
           
           if (!webhookUrl) {
             throw new Error(`Missing webhook URL for role: ${role}`)
