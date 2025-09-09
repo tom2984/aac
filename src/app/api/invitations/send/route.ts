@@ -141,11 +141,18 @@ export async function POST(request: Request) {
         console.log('✅ Invite record created successfully:', inviteRecord.id)
 
         // Create the invitation link with proper domain
+        console.log('🌐 Environment variables:');
+        console.log('  - NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL || 'MISSING');
+        console.log('  - SITE_URL:', process.env.SITE_URL || 'MISSING');
+        console.log('  - VERCEL_URL:', process.env.VERCEL_URL || 'MISSING');
+        
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+                       process.env.SITE_URL ||
                        process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
                        'http://localhost:3000'
         const inviteLink = `${baseUrl}/accept-invite?token=${token}`
         
+        console.log('🔗 Selected baseUrl:', baseUrl);
         console.log('🔗 Generated invitation link:', inviteLink.substring(0, 50) + '...')
 
         // Send email using Make.com
