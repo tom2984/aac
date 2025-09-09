@@ -31,6 +31,7 @@ function AcceptInviteForm() {
       if (token) {
         try {
           // Validate token and get invite data
+          console.log('🔍 Validating token:', token.substring(0, 8) + '...');
           const { data: invite, error: inviteError } = await supabase
             .from('invite_tokens')
             .select('*')
@@ -39,7 +40,10 @@ function AcceptInviteForm() {
             .gt('expires_at', new Date().toISOString())
             .single();
 
+          console.log('📊 Token validation result:', { invite, inviteError });
+
           if (inviteError || !invite) {
+            console.error('❌ Token validation failed:', inviteError);
             setInviteValid(false);
             setError('Invalid or expired invitation link.');
             return;
@@ -171,7 +175,10 @@ function AcceptInviteForm() {
           </p>
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-700 font-inter text-center">
-              <strong>Note:</strong> After creating your account, you'll be redirected to download the mobile app. Employees use the mobile app to complete forms.
+              <strong>Note:</strong> {inviteData?.role === 'employee' 
+                ? "After creating your account, you'll be redirected to download the mobile app. Employees use the mobile app to complete forms."
+                : "After creating your account, you'll be redirected to the admin dashboard where you can manage forms and team members."
+              }
             </p>
           </div>
         </div>
