@@ -322,10 +322,56 @@ const SettingsPage = () => {
       </div>
 
       {/* Team Members List */}
-      <TeamMembersTable 
-        employees={employees} 
-        adminsAndManagers={adminsAndManagers}
-      />
+      <div className="space-y-6">
+        {/* Employees Section */}
+        {employees.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Employees ({employees.length})</h3>
+              <p className="text-sm text-gray-600">Team members with employee access</p>
+            </div>
+            <div className="p-6">
+              <TeamMembersTable 
+                teamMembers={employees.map(emp => ({
+                  name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'N/A',
+                  email: emp.email,
+                  status: emp.status === 'active' ? 'Active' : 'Pending',
+                  role: emp.role
+                }))}
+                showRole={false}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Admins & Managers Section */}
+        {adminsAndManagers.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Admins & Managers ({adminsAndManagers.length})</h3>
+              <p className="text-sm text-gray-600">Team members with administrative access</p>
+            </div>
+            <div className="p-6">
+              <TeamMembersTable 
+                teamMembers={adminsAndManagers.map(admin => ({
+                  name: `${admin.first_name || ''} ${admin.last_name || ''}`.trim() || 'N/A',
+                  email: admin.email,
+                  status: admin.status === 'active' ? 'Active' : 'Pending',
+                  role: admin.role
+                }))}
+                showRole={true}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {employees.length === 0 && adminsAndManagers.length === 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+            <p className="text-gray-500">No team members found. Start by inviting some team members above!</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
