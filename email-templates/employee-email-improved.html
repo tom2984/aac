@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Welcome to AAC Team</title>
+    <style>
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        line-height: 1.6; 
+        color: #333; 
+        margin: 0; 
+        padding: 0; 
+        background-color: #f8f9fa; 
+      }
+      .email-container { 
+        max-width: 600px; 
+        margin: 0 auto; 
+        background: white; 
+        border-radius: 16px; 
+        overflow: hidden; 
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12); 
+        margin-top: 20px;
+        margin-bottom: 20px;
+      }
+      .header { 
+        background: linear-gradient(135deg, #FF6551 0%, #FF8A7A 100%); 
+        color: white; 
+        padding: 40px 30px; 
+        text-align: center; 
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      .content { 
+        padding: 40px 30px; 
+      }
+      .content h2 {
+        color: #2d3748;
+        font-size: 24px;
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+      .content p {
+        color: #4a5568;
+        font-size: 16px;
+        margin-bottom: 16px;
+      }
+      .main-button { 
+        display: inline-block; 
+        background: linear-gradient(135deg, #FF6551 0%, #FF8A7A 100%); 
+        color: white !important; 
+        padding: 18px 36px; 
+        text-decoration: none; 
+        border-radius: 12px; 
+        font-weight: 700; 
+        font-size: 18px;
+        box-shadow: 0 6px 20px rgba(255, 101, 81, 0.4);
+        transition: all 0.3s ease;
+        border: none;
+        text-align: center;
+        display: inline-block;
+      }
+      .main-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(255, 101, 81, 0.5);
+      }
+      .button-container {
+        text-align: center;
+        margin: 35px 0;
+      }
+      .info-box { 
+        background: linear-gradient(135deg, #EBF8FF 0%, #BEE3F8 100%); 
+        border-left: 4px solid #3182CE; 
+        padding: 25px; 
+        border-radius: 12px; 
+        margin: 30px 0; 
+      }
+      .info-box h4 {
+        margin-top: 0; 
+        color: #2B6CB0; 
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .info-box ol {
+        margin-bottom: 0; 
+        color: #2D3748;
+        font-size: 15px;
+      }
+      .info-box li {
+        margin-bottom: 8px;
+      }
+      .feature-box { 
+        background: linear-gradient(135deg, #F0FFF4 0%, #C6F6D5 100%); 
+        border-left: 4px solid #38A169; 
+        padding: 25px; 
+        border-radius: 12px; 
+        margin: 30px 0; 
+      }
+      .feature-box h4 {
+        margin-top: 0; 
+        color: #2F855A; 
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .feature-box p {
+        margin-bottom: 0; 
+        color: #2D3748;
+        font-size: 15px;
+      }
+      .footer { 
+        margin-top: 40px; 
+        padding-top: 25px; 
+        border-top: 2px solid #E2E8F0; 
+        font-size: 14px; 
+        color: #718096; 
+      }
+      .footer p {
+        margin-bottom: 8px;
+      }
+      .footer strong {
+        color: #4A5568;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <div class="header">
+        <h1>📱 Welcome to AAC!</h1>
+      </div>
+      <div class="content">
+        <h2>You've been invited to join our team</h2>
+        <p>Hi there!</p>
+        <p><strong>{{1.adminName}}</strong> has invited you to join the AAC form management system as a team member.</p>
+        
+        <div class="button-container">
+          <a href="https://aac-app-five.vercel.app/" class="main-button">
+            📱 Open AAC Mobile App
+          </a>
+        </div>
+        
+        <div class="info-box">
+          <h4>🚀 How to get started:</h4>
+          <ol>
+            <li><strong>Click the button above</strong> to open the AAC mobile app</li>
+            <li><strong>Create your account</strong> using this email: <strong>{{1.email}}</strong></li>
+            <li><strong>Complete forms</strong> assigned by {{1.adminName}}</li>
+            <li><strong>Submit reports</strong> and photos directly from the field</li>
+          </ol>
+        </div>
+        
+        <div class="feature-box">
+          <h4>📋 Why the mobile app?</h4>
+          <p>The AAC mobile app is designed specifically for field workers to quickly complete forms, take photos, and submit reports on-the-go. It works offline and syncs when you're back online!</p>
+        </div>
+        
+        <div class="footer">
+          <p><strong>Need help?</strong> Contact {{1.adminName}} or your system administrator.</p>
+          <p><em>This invitation will remain active until you create your account in the app.</em></p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

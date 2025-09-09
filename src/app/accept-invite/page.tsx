@@ -141,9 +141,16 @@ function AcceptInviteForm() {
         }
       }
 
-      // 4. Show success and redirect to mobile app
-      alert('Account created successfully! Please download the mobile app to access your forms.');
-      router.push('/mobile-app-download');
+      // 4. Role-based redirect after account creation
+      if (inviteData?.role === 'employee') {
+        // Employees shouldn't normally use this page, but if they do, redirect to app
+        alert('Account created! Please use the AAC Mobile App to access your forms.');
+        window.location.href = 'https://aac-app-five.vercel.app/';
+      } else {
+        // Admin/Manager goes to dashboard  
+        alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
+        router.push('/dashboard');
+      }
 
     } catch (error: any) {
       setError(error.message);
