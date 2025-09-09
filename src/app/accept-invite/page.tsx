@@ -147,9 +147,20 @@ function AcceptInviteForm() {
 
       // 4. Role-based redirect after account creation
       if (inviteData?.role === 'employee') {
-        // Employees shouldn't normally use this page, but if they do, redirect to app
-        alert('Account created! Please use the AAC Mobile App to access your forms.');
-        window.location.href = 'https://aac-app-five.vercel.app/';
+        // Get current session to help mobile app with authentication
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        alert('Account created! Redirecting you to the AAC Mobile App...');
+        
+        // Redirect to mobile app with onboarding parameters
+        const mobileAppUrl = new URL('https://aac-app-five.vercel.app/');
+        mobileAppUrl.searchParams.set('new_user', 'true');
+        mobileAppUrl.searchParams.set('email', email);
+        mobileAppUrl.searchParams.set('name', `${firstName} ${lastName}`);
+        mobileAppUrl.searchParams.set('role', 'employee');
+        
+        console.log('🚀 Redirecting employee to mobile app:', mobileAppUrl.toString());
+        window.location.href = mobileAppUrl.toString();
       } else {
         // Admin/Manager goes to dashboard  
         alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
