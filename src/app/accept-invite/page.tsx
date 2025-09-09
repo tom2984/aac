@@ -35,6 +35,8 @@ function AcceptInviteForm() {
           // Validate token and get invite data
           console.log('🔍 Validating token:', token.substring(0, 8) + '...');
           console.log('🔍 Current time:', new Date().toISOString());
+          console.log('🌐 Current URL:', window.location.href);
+          console.log('🔗 Full token for manual debugging:', token);
           
           // First check if token exists at all
           const { data: tokenCheck, error: tokenCheckError } = await supabase
@@ -86,18 +88,17 @@ function AcceptInviteForm() {
               
               // Provide specific error messages based on the issue
               if (tokenCheck.status === 'accepted') {
-                // In development, allow reusing accepted tokens for testing
-                if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
-                  console.log('📧 DEVELOPMENT MODE: Allowing reuse of accepted token for testing');
-                  setInviteData(tokenCheck);
-                  setEmail(tokenCheck.email);
-                  setInviteValid(true);
-                  return;
-                }
-                
-                setInviteValid(false);
-                setError('This invitation has already been used. Please contact your administrator for a new invitation.');
+                // Allow reusing accepted tokens for testing (on any domain for now)
+                console.log('🧪 TESTING MODE: Allowing reuse of accepted token for easier testing');
+                console.log('🔄 Treating accepted token as valid for testing purposes');
+                setInviteData(tokenCheck);
+                setEmail(tokenCheck.email);
+                setInviteValid(true);
                 return;
+                
+                // Uncomment below for production behavior:
+                // setInviteValid(false);
+                // setError('This invitation has already been used. Please contact your administrator for a new invitation.');
               }
               
               if (new Date(tokenCheck.expires_at) <= new Date()) {
