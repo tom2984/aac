@@ -199,7 +199,18 @@ const SettingsPage = () => {
       </div>
 
       {/* Personal Settings */}
-      <PersonalSettingsCard profile={profile} refreshProfile={refreshProfile} />
+      <PersonalSettingsCard 
+        initialFirstName={profile?.first_name || ''}
+        initialLastName={profile?.last_name || ''}
+        initialAvatarUrl={profile?.avatar_url || '/avatar-placeholder.png'}
+        onSave={async (data) => {
+          // Handle profile update logic here if needed
+          console.log('Profile update:', data);
+          if (refreshProfile) {
+            await refreshProfile();
+          }
+        }}
+      />
 
       {/* Team Management */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
