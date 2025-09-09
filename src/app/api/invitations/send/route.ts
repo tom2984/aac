@@ -179,7 +179,8 @@ export async function POST(request: Request) {
             throw new Error(`Make.com webhook failed: ${emailResult.status} ${emailResult.statusText}`)
           }
           
-          const makeResponse = await emailResult.json()
+          // Make.com typically returns plain text like "Accepted", not JSON
+          const makeResponse = await emailResult.text()
           console.log('✅ Email sent via Make.com:', makeResponse)
 
           results.push({
