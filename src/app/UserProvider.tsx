@@ -97,51 +97,52 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           }
           
           setProfile(basicProfile)
-        setLoading(false) // Stop loading immediately
+        // Don't stop loading immediately - wait for real profile fetch
+        console.log('UserProvider: Set basic profile, starting profile fetch...')
         
-        console.log('UserProvider: Set basic profile and stopped loading')
-          
-        // Try to fetch real profile in background
-        setTimeout(async () => {
-          try {
-            console.log('UserProvider: Starting background profile fetch...')
-            const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-              .eq('id', authUser.id)
-            .single()
-          
-            if (profileError) {
-              console.error('UserProvider: Profile fetch error:', profileError.code, profileError.message)
+        // Try to fetch real profile immediately
+        try {
+          console.log('UserProvider: Starting profile fetch...')
+          const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+            .eq('id', authUser.id)
+          .single()
+        
+          if (profileError) {
+            console.error('UserProvider: Profile fetch error:', profileError.code, profileError.message)
+            
+            if (profileError.code === 'PGRST116') {
+              console.log('UserProvider: No profile found, creating one...')
+              const { data: newProfile, error: createError } = await supabase
+                .from('profiles')
+                .insert({
+                  id: authUser.id,
+                  email: authUser.email,
+                  role: 'admin',
+                  status: 'active',
+                  first_name: '',
+                  last_name: ''
+                })
+                .select()
+                .single()
               
-              if (profileError.code === 'PGRST116') {
-                console.log('UserProvider: No profile found, creating one...')
-                const { data: newProfile, error: createError } = await supabase
-                  .from('profiles')
-                  .insert({
-                    id: authUser.id,
-                    email: authUser.email,
-                    role: 'admin',
-                    status: 'active',
-                    first_name: '',
-                    last_name: ''
-                  })
-                  .select()
-                  .single()
-                
-                if (!createError && newProfile && mountedRef.current) {
-                  console.log('UserProvider: Created new profile:', newProfile)
-                  setProfile(newProfile)
-                }
+              if (!createError && newProfile && mountedRef.current) {
+                console.log('UserProvider: Created new profile:', newProfile)
+                setProfile(newProfile)
               }
-            } else if (profileData && mountedRef.current) {
-              console.log('UserProvider: Loaded real profile:', profileData)
-              setProfile(profileData)
             }
-          } catch (profileErr) {
-            console.error('UserProvider: Profile fetch exception:', profileErr)
+            // Set loading to false even if profile fetch fails
+            if (mountedRef.current) setLoading(false)
+          } else if (profileData && mountedRef.current) {
+            console.log('UserProvider: Loaded real profile:', profileData)
+            setProfile(profileData)
+            setLoading(false) // Stop loading after successful profile fetch
           }
-        }, 100) // Small delay to ensure UI loads first
+        } catch (profileErr) {
+          console.error('UserProvider: Profile fetch exception:', profileErr)
+          if (mountedRef.current) setLoading(false)
+        }
         
         } else {
         // No user - clear everything

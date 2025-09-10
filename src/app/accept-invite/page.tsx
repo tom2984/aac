@@ -196,6 +196,17 @@ function AcceptInviteForm() {
         // If there's a session, the user is automatically signed in
         if (session) {
           console.log('✅ User automatically signed in with session');
+          
+          // Force refresh the auth state to sync with UserProvider
+          console.log('🔄 Triggering auth state refresh...');
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession) {
+            // Trigger auth state change manually to sync UserProvider
+            await supabase.auth.setSession({
+              access_token: currentSession.access_token,
+              refresh_token: currentSession.refresh_token
+            });
+          }
         } else if (message) {
           console.warn('⚠️ Auto sign-in failed:', message);
           // Still proceed with redirect, user can sign in manually if needed
@@ -222,10 +233,10 @@ function AcceptInviteForm() {
         // Admin/Manager goes to dashboard  
         alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
         
-        // Add small delay to ensure auth state propagates
+        // Add longer delay to ensure auth state propagates properly
         setTimeout(() => {
           router.push('/dashboard');
-        }, 1000);
+        }, 2000);
       }
 
     } catch (error: any) {
