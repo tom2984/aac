@@ -155,35 +155,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Session validation to prevent ghost mode
-  const validateSession = async () => {
+  // Simplified session refresh for manual use only
+  const refreshSession = async () => {
     try {
-      console.log('UserProvider: Validating session...')
+      console.log('UserProvider: Manual session refresh requested')
       const { data: { session }, error } = await supabase.auth.getSession()
       
-      if (error) {
-        console.error('UserProvider: Session validation error:', error)
-        if (user) {
-          console.log('UserProvider: Session invalid but user exists - clearing ghost state')
-          setUser(null)
-          setProfile(null)
-          setLoading(false)
-        }
-        return
-      }
-      
-      if (!session && user) {
-        console.log('UserProvider: No session but user exists - clearing ghost state')
+      if (session && session.user) {
+        console.log('UserProvider: Session refreshed successfully')
+        setUser(session.user)
+      } else if (error) {
+        console.error('UserProvider: Session refresh failed:', error)
         setUser(null)
         setProfile(null)
         setLoading(false)
-      } else if (session && (!user || user.id !== session.user.id)) {
-        console.log('UserProvider: Session exists but user mismatch - refreshing user')
-        setUser(session.user)
-        // Basic profile will be handled by auth state change listener
       }
     } catch (error) {
-      console.error('UserProvider: Session validation exception:', error)
+      console.error('UserProvider: Session refresh exception:', error)
     }
   }
 
@@ -245,41 +233,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             if (profileError.code === 'PGRST116') {
               console.log('UserProvider: No profile found, creating one...')
               
-              // Retry profile creation with backoff
-              let createSuccess = false
-              for (let attempt = 1; attempt <= 3 && !createSuccess && mountedRef.current; attempt++) {
-                console.log(`UserProvider: Profile creation attempt ${attempt}/3`)
+              // Simple profile creation - one attempt only
+              try {
+                const { data: newProfile, error: createError } = await supabase
+                  .from('profiles')
+                  .insert({
+                    id: authUser.id,
+                    email: authUser.email,
+                    role: authUser.user_metadata?.role || 'employee',
+                    status: 'active',
+                    first_name: authUser.user_metadata?.first_name || '',
+                    last_name: authUser.user_metadata?.last_name || ''
+                  })
+                  .select()
+                  .single()
                 
-                try {
-                  const { data: newProfile, error: createError } = await supabase
-                    .from('profiles')
-                    .insert({
-                      id: authUser.id,
-                      email: authUser.email,
-                      role: authUser.user_metadata?.role || 'employee',
-                      status: 'active',
-                      first_name: authUser.user_metadata?.first_name || '',
-                      last_name: authUser.user_metadata?.last_name || ''
-                    })
-                    .select()
-                    .single()
-                  
-                  if (!createError && newProfile && mountedRef.current) {
-                    console.log('UserProvider: ✅ Created profile successfully:', newProfile)
-                    setProfile(newProfile)
-                    createSuccess = true
-                  } else {
-                    console.error(`UserProvider: ❌ Profile creation attempt ${attempt} failed:`, createError)
-                    if (attempt < 3) {
-                      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Exponential backoff
-                    }
-                  }
-                } catch (createErr) {
-                  console.error(`UserProvider: ❌ Profile creation attempt ${attempt} exception:`, createErr)
-                  if (attempt < 3) {
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
-                  }
+                if (!createError && newProfile && mountedRef.current) {
+                  console.log('UserProvider: Created profile:', newProfile)
+                  setProfile(newProfile)
+                } else {
+                  console.error('UserProvider: Profile creation failed:', createError)
                 }
+              } catch (createErr) {
+                console.error('UserProvider: Profile creation exception:', createErr)
               }
             }
             // ALWAYS set loading to false after profile operations
@@ -334,38 +310,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         
         console.log('UserProvider: Getting initial session...')
     
-        // Get initial session with longer timeout and retry logic
-        const getSessionWithRetry = async (attempt = 1) => {
-          try {
-            console.log(`UserProvider: Getting session (attempt ${attempt})...`)
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-            
-            if (sessionError) {
-              console.error(`UserProvider: Session error on attempt ${attempt}:`, sessionError)
-              if (attempt < 3) {
-                console.log(`UserProvider: Retrying session fetch in 1s...`)
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                return getSessionWithRetry(attempt + 1)
-              }
-              throw sessionError
-            }
-            
-            return { data: { session }, error: sessionError }
-          } catch (error) {
-            if (attempt < 3) {
-              console.log(`UserProvider: Session fetch failed, retrying...`)
-              await new Promise(resolve => setTimeout(resolve, 1000))
-              return getSessionWithRetry(attempt + 1)
-            }
-            throw error
-          }
-        }
-        
+        // Simple session fetch - no complex retry logic
         try {
-          const { data: { session }, error: sessionError } = await getSessionWithRetry()
+          console.log('UserProvider: Getting initial session...')
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         
           if (sessionError) {
-            console.error('UserProvider: Final session error after retries:', sessionError)
+            console.error('UserProvider: Session error:', sessionError)
             if (mountedRef.current) {
               setLoading(false)
             }
@@ -374,7 +325,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             await handleAuthUser(session?.user, 'initial')
           }
         } catch (error) {
-          console.error('UserProvider: Session fetch failed after all retries:', error)
+          console.error('UserProvider: Session fetch failed:', error)
           if (mountedRef.current) {
             setLoading(false)
           }
@@ -390,20 +341,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     // Start auth initialization
     initAuth()
-    
-    // Set up periodic session validation to prevent ghost mode
-    console.log('UserProvider: Setting up session validation interval')
-    const sessionValidationInterval = setInterval(() => {
-      if (mountedRef.current) {
-        validateSession()
-      }
-    }, 30000) // Check every 30 seconds
 
     // Cleanup function
     return () => {
       console.log('UserProvider: Cleaning up...')
       mountedRef.current = false
-      clearInterval(sessionValidationInterval)
       
       if (authListener?.subscription) {
         authListener.subscription.unsubscribe()
@@ -411,11 +353,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []) // Run only once
 
-  // Manual session refresh for admin actions
-  const refreshSession = async () => {
-    console.log('UserProvider: Manual session refresh requested')
-    await validateSession()
-  }
 
   return (
     <UserContext.Provider value={{ user, profile, loading, refreshProfile, logout, refreshSession }}>

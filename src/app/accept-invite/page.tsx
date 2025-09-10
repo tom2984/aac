@@ -161,43 +161,24 @@ function AcceptInviteForm() {
           setInviteValid(true);
 
         } catch (error) {
-          // Retry once if this is the first attempt
-          if (retryCount === 0) {
-            console.log('🔄 Retrying due to validation error (race condition fix)');
-            setTimeout(() => {
-              validateInvite(1);
-            }, 1000);
-            return;
-          }
-          
+          console.error('🔥 Token validation failed:', error);
           setInviteValid(false);
           setError('Error validating invitation.');
         }
       } else {
-        // No token found - check if we should retry
-        if (retryCount === 0) {
-          console.log('🔄 No token found on first attempt, retrying with URL parsing...');
+        // No token found - try direct URL parsing once
+        if (retryCount === 0 && typeof window !== 'undefined') {
+          console.log('🔄 No token found, trying direct URL parsing...');
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlToken = urlParams.get('token');
           
-          // Try parsing token directly from window.location if searchParams failed
-          if (typeof window !== 'undefined') {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlToken = urlParams.get('token');
-            console.log('🔍 Direct URL token check:', urlToken);
-            
-            if (urlToken) {
-              console.log('✅ Found token in direct URL check, retrying validation...');
-              setTimeout(() => {
-                validateInvite(1);
-              }, 500);
-              return;
-            }
+          if (urlToken) {
+            console.log('✅ Found token in direct URL check, retrying...');
+            setTimeout(() => {
+              validateInvite(1);
+            }, 500);
+            return;
           }
-          
-          // Still no token, retry once more
-          setTimeout(() => {
-            validateInvite(1);
-          }, 1000);
-          return;
         }
         
         // Fallback to old email-based system (for backwards compatibility)
@@ -237,12 +218,12 @@ function AcceptInviteForm() {
     setLoading(true);
     setError('');
     
-    // Add timeout to prevent hanging
+    // Add simple timeout protection  
     const timeoutId = setTimeout(() => {
-      console.error('🚨 Account creation timeout - forcing completion');
+      console.error('🚨 Account creation timeout');
       setLoading(false);
-      setError('Account creation timed out. Please try again or contact support.');
-    }, 30000); // 30 second timeout
+      setError('Account creation timed out. Please try again.');
+    }, 15000); // 15 second timeout
 
       try {
         // 1. Create user account via API (bypasses email confirmation for invited users)
@@ -326,48 +307,14 @@ function AcceptInviteForm() {
         console.log('🚀 Redirecting employee to mobile app:', mobileAppUrl.toString());
         window.location.href = mobileAppUrl.toString();
       } else {
-        // Admin/Manager goes to dashboard with enhanced redirect
-        console.log('🎯 Admin/Manager user detected - starting enhanced redirect to dashboard');
+        // Admin/Manager goes to dashboard - simple redirect
+        console.log('🎯 Admin/Manager user - redirecting to dashboard');
         
-        setLoading(true);
-        
-        // Immediate attempt - no delay
-        console.log('🚀 Immediate redirect attempt');
-        router.push('/dashboard');
-        
-        // Quick fallback after 800ms
+        // Wait a moment for session to settle, then redirect
         setTimeout(() => {
-          console.log('🚀 Quick fallback redirect (800ms)');
-          if (window.location.pathname !== '/dashboard') {
-            window.location.href = '/dashboard';
-          }
-        }, 800);
-        
-        // Medium fallback after 2 seconds
-        setTimeout(() => {
-          console.log('🚀 Medium fallback redirect (2s)');
-          if (window.location.pathname !== '/dashboard') {
-            window.location.replace('/dashboard');
-          }
-        }, 2000);
-        
-        // Nuclear option after 4 seconds
-        setTimeout(() => {
-          console.log('🚨 Nuclear redirect - forcing navigation (4s)');
-          window.location.replace('/dashboard');
-        }, 4000);
-        
-        // Emergency safety net after 6 seconds
-        setTimeout(() => {
-          console.log('🆘 Emergency fallback - if still not on dashboard, force reload');
-          if (window.location.pathname !== '/dashboard') {
-            console.error('🚨 All redirects failed, forcing hard reload to dashboard');
-            window.location.href = '/dashboard';
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
-          }
-        }, 6000);
+          console.log('🚀 Redirecting to dashboard...');
+          window.location.href = '/dashboard';
+        }, 1000);
       }
 
     } catch (error: any) {
