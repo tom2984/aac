@@ -197,19 +197,35 @@ function AcceptInviteForm() {
         if (session) {
           console.log('✅ User automatically signed in with session');
           
-          // Force refresh the auth state to sync with UserProvider
-          console.log('🔄 Triggering auth state refresh...');
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (currentSession) {
-            // Trigger auth state change manually to sync UserProvider
-            await supabase.auth.setSession({
-              access_token: currentSession.access_token,
-              refresh_token: currentSession.refresh_token
-            });
+          // Force set the session on the client-side to sync with UserProvider
+          console.log('🔄 Setting session on client-side supabase instance...');
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token
+          });
+          
+          if (sessionError) {
+            console.error('❌ Error setting session:', sessionError);
+          } else {
+            console.log('✅ Session successfully set on client');
+            
+            // Wait a moment for auth listeners to fire
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         } else if (message) {
           console.warn('⚠️ Auto sign-in failed:', message);
-          // Still proceed with redirect, user can sign in manually if needed
+          // Try to sign in manually as fallback
+          console.log('🔄 Attempting manual sign-in as fallback...');
+          const { data: fallbackData, error: fallbackError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+          });
+          
+          if (fallbackError) {
+            console.error('❌ Manual sign-in fallback failed:', fallbackError);
+          } else {
+            console.log('✅ Manual sign-in fallback successful');
+          }
         }
 
       // 2. Role-based redirect after account creation
@@ -233,10 +249,11 @@ function AcceptInviteForm() {
         // Admin/Manager goes to dashboard  
         alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
         
-        // Add longer delay to ensure auth state propagates properly
+        // Add even longer delay to ensure auth state propagates properly
         setTimeout(() => {
+          console.log('🚀 Redirecting to dashboard after auth state propagation');
           router.push('/dashboard');
-        }, 2000);
+        }, 3000);
       }
 
     } catch (error: any) {

@@ -161,7 +161,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (!mountedRef.current) return
           console.log('UserProvider: Auth state changed:', event, session?.user?.email || 'none')
-          await handleAuthUser(session?.user, 'listener')
+          
+          // Handle all auth events that indicate a user is signed in
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || (event === 'INITIAL_SESSION' && session)) {
+            console.log('UserProvider: Detected sign-in event, processing user...')
+            await handleAuthUser(session?.user, `listener-${event}`)
+          } else if (event === 'SIGNED_OUT' || !session) {
+            console.log('UserProvider: Detected sign-out event, clearing user...')
+            await handleAuthUser(null, `listener-${event}`)
+          }
     })
 
         authListener = listener
