@@ -179,7 +179,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
       } else if (session && (!user || user.id !== session.user.id)) {
         console.log('UserProvider: Session exists but user mismatch - refreshing user')
-        await handleAuthUser(session.user, 'session-validation')
+        setUser(session.user)
+        // Basic profile will be handled by auth state change listener
       }
     } catch (error) {
       console.error('UserProvider: Session validation exception:', error)
