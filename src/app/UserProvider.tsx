@@ -56,9 +56,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         sessionStorage.clear()
         
         // Clear any cookies
-        document.cookie.split(";").forEach(c => {
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
-        })
+        if (document.cookie) {
+          document.cookie.split(";").forEach(c => {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+          })
+        }
         
         console.log('UserProvider: Cleared all local storage and session data')
       }
@@ -88,10 +90,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         sessionStorage.clear()
         
         // Clear cookies more aggressively
-        document.cookie.split(";").forEach(c => {
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
-        })
+        if (document.cookie) {
+          document.cookie.split(";").forEach(c => {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
+          })
+        }
       }
       
       // Clear state
@@ -114,10 +118,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.clear()
       
       // Clear all cookies
-      document.cookie.split(";").forEach(c => {
-        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
-        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
-      })
+      if (document.cookie) {
+        document.cookie.split(";").forEach(c => {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
+        })
+      }
       
       // Make it globally accessible for emergency use
       (window as any).forceLogout = forceLogout
