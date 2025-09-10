@@ -25,7 +25,7 @@ function AcceptInviteForm() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const validateInvite = async () => {
+    const validateInvite = async (retryCount = 0) => {
       // Check for token first (new secure system)
       const rawToken = searchParams.get('token');
       
@@ -116,6 +116,7 @@ function AcceptInviteForm() {
                 setInviteData(tokenCheck);
                 setEmail(tokenCheck.email);
                 setInviteValid(true);
+                setError(''); // Clear any existing errors
                 return;
                 
                 // Uncomment below for production behavior:
@@ -130,6 +131,15 @@ function AcceptInviteForm() {
               }
             }
             
+            // Retry once if this is the first attempt (race condition fix)
+            if (retryCount === 0) {
+              console.log('🔄 Retrying token validation (first attempt may have failed due to race condition)');
+              setTimeout(() => {
+                validateInvite(1);
+              }, 1000);
+              return;
+            }
+            
             setInviteValid(false);
             setError('Invalid or expired invitation link.');
             return;
@@ -140,6 +150,15 @@ function AcceptInviteForm() {
           setInviteValid(true);
 
         } catch (error) {
+          // Retry once if this is the first attempt
+          if (retryCount === 0) {
+            console.log('🔄 Retrying due to validation error (race condition fix)');
+            setTimeout(() => {
+              validateInvite(1);
+            }, 1000);
+            return;
+          }
+          
           setInviteValid(false);
           setError('Error validating invitation.');
         }
@@ -264,20 +283,37 @@ function AcceptInviteForm() {
         window.location.href = mobileAppUrl.toString();
       } else {
         // Admin/Manager goes to dashboard  
-        alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
+        alert('Account created successfully! Redirecting to dashboard...');
         
-        // Add even longer delay to ensure auth state propagates properly
+        // Show loading state and redirect progressively
+        setLoading(true);
+        console.log('🚀 Starting redirect sequence for admin/manager user');
+        
+        // First attempt - shorter delay
         setTimeout(() => {
-          console.log('🚀 Redirecting to dashboard after auth state propagation');
+          console.log('🚀 First redirect attempt to dashboard');
           router.push('/dashboard');
-        }, 3000);
+        }, 1500);
+        
+        // Fallback redirect using window.location if router fails
+        setTimeout(() => {
+          console.log('🚀 Fallback redirect to dashboard via window.location');
+          window.location.href = '/dashboard';
+        }, 4000);
+        
+        // Final nuclear option - force redirect
+        setTimeout(() => {
+          console.log('🚨 Nuclear redirect - forcing navigation to dashboard');
+          window.location.replace('/dashboard');
+        }, 6000);
       }
 
     } catch (error: any) {
       setError(error.message);
-    } finally {
       setLoading(false);
     }
+    // Note: Don't set loading to false here for admin users
+    // since we want to show loading during the redirect sequence
   };
 
   return (
