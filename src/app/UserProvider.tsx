@@ -43,36 +43,99 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('UserProvider: Logging out...')
       
-      // Clear local storage
+      // Force clear ALL session data
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('supabase.auth.token')
+        // Clear all Supabase-related localStorage items
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('supabase') || key.includes('auth')) {
+            localStorage.removeItem(key)
+          }
+        })
+        
+        // Clear all sessionStorage
         sessionStorage.clear()
+        
+        // Clear any cookies
+        document.cookie.split(";").forEach(c => {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+        })
+        
+        console.log('UserProvider: Cleared all local storage and session data')
       }
       
-      // Sign out from Supabase
-      await supabase.auth.signOut()
+      // Sign out from Supabase with scope 'global' to clear all sessions
+      await supabase.auth.signOut({ scope: 'global' })
+      console.log('UserProvider: Signed out from Supabase')
 
       // Clear local state immediately
       setUser(null)
       setProfile(null)
       setLoading(false)
       
-      // Redirect to home page
-      window.location.href = '/'
+      // Use window.location.replace instead of href for complete refresh
+      console.log('UserProvider: Redirecting to home page...')
+      window.location.replace('/')
       
     } catch (error) {
       console.error('UserProvider: Error during logout:', error)
-      // Force logout anyway
+      
+      // FORCE logout - nuclear option
+      console.log('UserProvider: Force logout - clearing everything')
+      
+      if (typeof window !== 'undefined') {
+        // Nuclear option - clear everything
+        localStorage.clear()
+        sessionStorage.clear()
+        
+        // Clear cookies more aggressively
+        document.cookie.split(";").forEach(c => {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
+        })
+      }
+      
+      // Clear state
       setUser(null)
       setProfile(null)
       setLoading(false)
-      window.location.href = '/'
+      
+      // Force complete page reload and redirect
+      window.location.replace('/')
+    }
+  }
+
+  // Manual force logout for emergencies (can be called from browser console)
+  const forceLogout = () => {
+    console.log('🚨 FORCE LOGOUT INITIATED')
+    
+    if (typeof window !== 'undefined') {
+      // Nuclear option - clear everything
+      localStorage.clear()
+      sessionStorage.clear()
+      
+      // Clear all cookies
+      document.cookie.split(";").forEach(c => {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/;domain=" + window.location.hostname)
+      })
+      
+      // Make it globally accessible for emergency use
+      (window as any).forceLogout = forceLogout
+      console.log('🚨 Emergency logout available: window.forceLogout()')
+      
+      // Force complete page reload
+      window.location.replace('/')
     }
   }
 
   useEffect(() => {
     mountedRef.current = true
     console.log('UserProvider: Component mounted, starting auth initialization')
+    
+    // Make force logout available globally for emergencies
+    if (typeof window !== 'undefined') {
+      (window as any).forceLogout = forceLogout
+    }
 
     let authListener: any = null
 
