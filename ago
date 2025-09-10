@@ -1,0 +1,10 @@
+[33m8a19571[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Fix TypeScript error: handle undefined token case
+[33m153cc3e[m Fix TypeScript error: resolve token scope issue in accept-invite page
+[33m21ffbc3[m fix: remove remaining Resend imports and replace with Make.com implementation
+[33mfecea3a[m fix: restore custom signup API to bypass email confirmation for invited users
+[33m56f90c5[m fix: resolve base64 token URL encoding issues with + characters
+[33m17d8fb4[m fix: resolve token variable naming conflict preventing invitation token creation
+[33md133c1b[m fix: enable token reuse for testing and add comprehensive debugging
+[33m014d01f[m debug: add token debug endpoints to investigate validation issues
+[33m67363c9[m fix: improve token validation error handling and testing support
+[33m0a92de8[m debug: add comprehensive token validation debugging
