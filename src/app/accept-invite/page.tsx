@@ -28,11 +28,28 @@ function AcceptInviteForm() {
     const validateInvite = async () => {
       // Check for token first (new secure system)
       const rawToken = searchParams.get('token');
-      // Fix URL decoding issue: + characters in base64 tokens get decoded as spaces
-      const processedToken = rawToken?.replace(/ /g, '+') || null;
+      
+      // Handle both token formats: hex (new) and base64 (legacy)
+      let processedToken = rawToken || null;
+      
+      if (rawToken) {
+        // If token contains only hex characters (0-9, a-f), it's a new hex token
+        const isHexToken = /^[0-9a-f]+$/i.test(rawToken);
+        
+        if (isHexToken) {
+          // New hex tokens are already URL-safe, use as-is
+          processedToken = rawToken;
+          console.log('🎯 Detected hex token (new format)');
+        } else {
+          // Legacy base64 token - fix URL decoding issues
+          processedToken = rawToken.replace(/ /g, '+');
+          console.log('🎯 Detected base64 token (legacy format)');
+        }
+      }
+      
       setToken(processedToken);
       console.log('🎯 Raw token from URL:', rawToken);
-      console.log('🔧 Fixed token (spaces→+):', processedToken);
+      console.log('🔧 Processed token:', processedToken);
       console.log('🎯 Token length:', processedToken?.length);
       
       if (processedToken) {
