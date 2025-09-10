@@ -8,6 +8,7 @@ const UserContext = createContext<{
   loading: boolean;
   refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 } | null>(null)
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
@@ -154,6 +155,37 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Session validation to prevent ghost mode
+  const validateSession = async () => {
+    try {
+      console.log('UserProvider: Validating session...')
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error('UserProvider: Session validation error:', error)
+        if (user) {
+          console.log('UserProvider: Session invalid but user exists - clearing ghost state')
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+        }
+        return
+      }
+      
+      if (!session && user) {
+        console.log('UserProvider: No session but user exists - clearing ghost state')
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+      } else if (session && (!user || user.id !== session.user.id)) {
+        console.log('UserProvider: Session exists but user mismatch - refreshing user')
+        await handleAuthUser(session.user, 'session-validation')
+      }
+    } catch (error) {
+      console.error('UserProvider: Session validation exception:', error)
+    }
+  }
+
   useEffect(() => {
     mountedRef.current = true
     console.log('UserProvider: Component mounted, starting auth initialization')
@@ -189,47 +221,83 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         // Don't stop loading immediately - wait for real profile fetch
         console.log('UserProvider: Set basic profile, starting profile fetch...')
         
+        // Add timeout protection to prevent hanging
+        const profileTimeout = setTimeout(() => {
+          console.error('🚨 UserProvider: Profile operation timeout - forcing loading to stop')
+          if (mountedRef.current) setLoading(false)
+        }, 8000) // 8 second timeout
+        
         // Try to fetch real profile immediately
         try {
           console.log('UserProvider: Starting profile fetch...')
           const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
+            .from('profiles')
+            .select('*')
             .eq('id', authUser.id)
-          .single()
+            .single()
         
+          clearTimeout(profileTimeout) // Clear timeout on successful fetch
+          
           if (profileError) {
             console.error('UserProvider: Profile fetch error:', profileError.code, profileError.message)
             
             if (profileError.code === 'PGRST116') {
               console.log('UserProvider: No profile found, creating one...')
-              const { data: newProfile, error: createError } = await supabase
-                .from('profiles')
-                .insert({
-                  id: authUser.id,
-                  email: authUser.email,
-                  role: 'admin',
-                  status: 'active',
-                  first_name: '',
-                  last_name: ''
-                })
-                .select()
-                .single()
               
-              if (!createError && newProfile && mountedRef.current) {
-                console.log('UserProvider: Created new profile:', newProfile)
-                setProfile(newProfile)
+              // Retry profile creation with backoff
+              let createSuccess = false
+              for (let attempt = 1; attempt <= 3 && !createSuccess && mountedRef.current; attempt++) {
+                console.log(`UserProvider: Profile creation attempt ${attempt}/3`)
+                
+                try {
+                  const { data: newProfile, error: createError } = await supabase
+                    .from('profiles')
+                    .insert({
+                      id: authUser.id,
+                      email: authUser.email,
+                      role: authUser.user_metadata?.role || 'employee',
+                      status: 'active',
+                      first_name: authUser.user_metadata?.first_name || '',
+                      last_name: authUser.user_metadata?.last_name || ''
+                    })
+                    .select()
+                    .single()
+                  
+                  if (!createError && newProfile && mountedRef.current) {
+                    console.log('UserProvider: ✅ Created profile successfully:', newProfile)
+                    setProfile(newProfile)
+                    createSuccess = true
+                  } else {
+                    console.error(`UserProvider: ❌ Profile creation attempt ${attempt} failed:`, createError)
+                    if (attempt < 3) {
+                      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Exponential backoff
+                    }
+                  }
+                } catch (createErr) {
+                  console.error(`UserProvider: ❌ Profile creation attempt ${attempt} exception:`, createErr)
+                  if (attempt < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+                  }
+                }
               }
             }
-            // Set loading to false even if profile fetch fails
+            // ALWAYS set loading to false after profile operations
             if (mountedRef.current) setLoading(false)
+            
           } else if (profileData && mountedRef.current) {
-            console.log('UserProvider: Loaded real profile:', profileData)
+            console.log('UserProvider: ✅ Loaded existing profile:', profileData)
             setProfile(profileData)
             setLoading(false) // Stop loading after successful profile fetch
+          } else {
+            // Fallback - no profile data but no error
+            console.warn('UserProvider: ⚠️ No profile data returned, stopping loading')
+            if (mountedRef.current) setLoading(false)
           }
+          
         } catch (profileErr) {
-          console.error('UserProvider: Profile fetch exception:', profileErr)
+          clearTimeout(profileTimeout)
+          console.error('UserProvider: ❌ Profile operation exception:', profileErr)
+          // ALWAYS stop loading on exceptions
           if (mountedRef.current) setLoading(false)
         }
         
@@ -321,11 +389,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     // Start auth initialization
     initAuth()
+    
+    // Set up periodic session validation to prevent ghost mode
+    console.log('UserProvider: Setting up session validation interval')
+    const sessionValidationInterval = setInterval(() => {
+      if (mountedRef.current) {
+        validateSession()
+      }
+    }, 30000) // Check every 30 seconds
 
     // Cleanup function
     return () => {
       console.log('UserProvider: Cleaning up...')
       mountedRef.current = false
+      clearInterval(sessionValidationInterval)
       
       if (authListener?.subscription) {
         authListener.subscription.unsubscribe()
@@ -333,8 +410,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []) // Run only once
 
+  // Manual session refresh for admin actions
+  const refreshSession = async () => {
+    console.log('UserProvider: Manual session refresh requested')
+    await validateSession()
+  }
+
   return (
-    <UserContext.Provider value={{ user, profile, loading, refreshProfile, logout }}>
+    <UserContext.Provider value={{ user, profile, loading, refreshProfile, logout, refreshSession }}>
       {children}
     </UserContext.Provider>
   )

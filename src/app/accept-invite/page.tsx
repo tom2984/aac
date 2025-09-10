@@ -326,29 +326,47 @@ function AcceptInviteForm() {
         console.log('🚀 Redirecting employee to mobile app:', mobileAppUrl.toString());
         window.location.href = mobileAppUrl.toString();
       } else {
-        // Admin/Manager goes to dashboard  
-        alert('Account created successfully! Redirecting to dashboard...');
+        // Admin/Manager goes to dashboard with enhanced redirect
+        console.log('🎯 Admin/Manager user detected - starting enhanced redirect to dashboard');
         
-        // Show loading state and redirect progressively
         setLoading(true);
-        console.log('🚀 Starting redirect sequence for admin/manager user');
         
-        // First attempt - shorter delay
-        setTimeout(() => {
-          console.log('🚀 First redirect attempt to dashboard');
-          router.push('/dashboard');
-        }, 1500);
+        // Immediate attempt - no delay
+        console.log('🚀 Immediate redirect attempt');
+        router.push('/dashboard');
         
-        // Fallback redirect using window.location if router fails
+        // Quick fallback after 800ms
         setTimeout(() => {
-          console.log('🚀 Fallback redirect to dashboard via window.location');
-          window.location.href = '/dashboard';
+          console.log('🚀 Quick fallback redirect (800ms)');
+          if (window.location.pathname !== '/dashboard') {
+            window.location.href = '/dashboard';
+          }
+        }, 800);
+        
+        // Medium fallback after 2 seconds
+        setTimeout(() => {
+          console.log('🚀 Medium fallback redirect (2s)');
+          if (window.location.pathname !== '/dashboard') {
+            window.location.replace('/dashboard');
+          }
+        }, 2000);
+        
+        // Nuclear option after 4 seconds
+        setTimeout(() => {
+          console.log('🚨 Nuclear redirect - forcing navigation (4s)');
+          window.location.replace('/dashboard');
         }, 4000);
         
-        // Final nuclear option - force redirect
+        // Emergency safety net after 6 seconds
         setTimeout(() => {
-          console.log('🚨 Nuclear redirect - forcing navigation to dashboard');
-          window.location.replace('/dashboard');
+          console.log('🆘 Emergency fallback - if still not on dashboard, force reload');
+          if (window.location.pathname !== '/dashboard') {
+            console.error('🚨 All redirects failed, forcing hard reload to dashboard');
+            window.location.href = '/dashboard';
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          }
         }, 6000);
       }
 
