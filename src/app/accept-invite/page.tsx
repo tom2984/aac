@@ -187,10 +187,18 @@ function AcceptInviteForm() {
           throw new Error(errorData.error || 'Failed to create account');
         }
 
-        const { user: authData } = await signupResponse.json();
+        const { user: authData, session, message } = await signupResponse.json();
 
         if (!authData) {
           throw new Error('Failed to create user account');
+        }
+
+        // If there's a session, the user is automatically signed in
+        if (session) {
+          console.log('✅ User automatically signed in with session');
+        } else if (message) {
+          console.warn('⚠️ Auto sign-in failed:', message);
+          // Still proceed with redirect, user can sign in manually if needed
         }
 
       // 2. Role-based redirect after account creation
@@ -213,7 +221,11 @@ function AcceptInviteForm() {
       } else {
         // Admin/Manager goes to dashboard  
         alert('Account created successfully! Welcome to the AAC Admin Dashboard.');
-        router.push('/dashboard');
+        
+        // Add small delay to ensure auth state propagates
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1000);
       }
 
     } catch (error: any) {

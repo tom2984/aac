@@ -85,9 +85,26 @@ export async function POST(request: Request) {
         }
       }
       
+      // After creating user with admin, sign them in automatically
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      
+      if (signInError) {
+        console.error('❌ Auto sign-in error:', signInError)
+        // Return user data even if auto sign-in fails
+        return NextResponse.json({ 
+          user: data.user,
+          session: null,
+          message: 'Account created but auto sign-in failed. Please sign in manually.'
+        })
+      }
+      
+      console.log('✅ User automatically signed in after creation')
       return NextResponse.json({ 
-        user: data.user,
-        session: null // Admin creation doesn't return a session
+        user: signInData.user,
+        session: signInData.session
       })
     } else {
       console.log('📧 Using standard signup with email confirmation')
