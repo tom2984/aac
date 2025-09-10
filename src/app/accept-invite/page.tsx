@@ -29,7 +29,7 @@ function AcceptInviteForm() {
       // Check for token first (new secure system)
       const rawToken = searchParams.get('token');
       // Fix URL decoding issue: + characters in base64 tokens get decoded as spaces
-      const processedToken = rawToken?.replace(/ /g, '+');
+      const processedToken = rawToken?.replace(/ /g, '+') || null;
       setToken(processedToken);
       console.log('🎯 Raw token from URL:', rawToken);
       console.log('🔧 Fixed token (spaces→+):', processedToken);
