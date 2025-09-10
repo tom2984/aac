@@ -26,8 +26,19 @@ function AcceptInviteForm() {
 
   useEffect(() => {
     const validateInvite = async (retryCount = 0) => {
+      // Add delay on first load to ensure URL parameters are ready
+      if (retryCount === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       // Check for token first (new secure system)
       const rawToken = searchParams.get('token');
+      
+      console.log(`🔍 Validation attempt ${retryCount + 1}:`, {
+        rawToken,
+        searchParamsSize: searchParams ? Array.from(searchParams.entries()).length : 0,
+        url: typeof window !== 'undefined' ? window.location.href : 'N/A'
+      });
       
       // Handle both token formats: hex (new) and base64 (legacy)
       let processedToken = rawToken || null;
@@ -163,6 +174,32 @@ function AcceptInviteForm() {
           setError('Error validating invitation.');
         }
       } else {
+        // No token found - check if we should retry
+        if (retryCount === 0) {
+          console.log('🔄 No token found on first attempt, retrying with URL parsing...');
+          
+          // Try parsing token directly from window.location if searchParams failed
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlToken = urlParams.get('token');
+            console.log('🔍 Direct URL token check:', urlToken);
+            
+            if (urlToken) {
+              console.log('✅ Found token in direct URL check, retrying validation...');
+              setTimeout(() => {
+                validateInvite(1);
+              }, 500);
+              return;
+            }
+          }
+          
+          // Still no token, retry once more
+          setTimeout(() => {
+            validateInvite(1);
+          }, 1000);
+          return;
+        }
+        
         // Fallback to old email-based system (for backwards compatibility)
         const emailParam = searchParams.get('email');
         if (emailParam) {
@@ -199,6 +236,13 @@ function AcceptInviteForm() {
 
     setLoading(true);
     setError('');
+    
+    // Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      console.error('🚨 Account creation timeout - forcing completion');
+      setLoading(false);
+      setError('Account creation timed out. Please try again or contact support.');
+    }, 30000); // 30 second timeout
 
       try {
         // 1. Create user account via API (bypasses email confirmation for invited users)
@@ -309,8 +353,12 @@ function AcceptInviteForm() {
       }
 
     } catch (error: any) {
+      clearTimeout(timeoutId);
       setError(error.message);
       setLoading(false);
+    } finally {
+      // Clear timeout on successful completion
+      clearTimeout(timeoutId);
     }
     // Note: Don't set loading to false here for admin users
     // since we want to show loading during the redirect sequence

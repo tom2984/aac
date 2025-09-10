@@ -33,6 +33,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setProfile(profileData)
       } else {
         console.error('UserProvider: Profile refresh failed:', profileError)
+        
+        // If profile refresh fails, try to refresh the session
+        console.log('UserProvider: Attempting session refresh due to profile error...')
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshedSession && !refreshError) {
+          console.log('UserProvider: Session refreshed successfully')
+          setUser(refreshedSession.user)
+          // Retry profile fetch with refreshed session
+          const { data: retryProfileData, error: retryProfileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', refreshedSession.user.id)
+            .single()
+            
+          if (retryProfileData && !retryProfileError) {
+            console.log('UserProvider: Profile loaded after session refresh')
+            setProfile(retryProfileData)
+          }
+        }
       }
     } catch (error) {
       console.error('UserProvider: Profile refresh exception:', error)
@@ -245,25 +265,49 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         
         console.log('UserProvider: Getting initial session...')
     
-        // Get initial session with short timeout
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise<any>((_, reject) => 
-          setTimeout(() => reject(new Error('Session timeout')), 2000)
-        )
+        // Get initial session with longer timeout and retry logic
+        const getSessionWithRetry = async (attempt = 1) => {
+          try {
+            console.log(`UserProvider: Getting session (attempt ${attempt})...`)
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+            
+            if (sessionError) {
+              console.error(`UserProvider: Session error on attempt ${attempt}:`, sessionError)
+              if (attempt < 3) {
+                console.log(`UserProvider: Retrying session fetch in 1s...`)
+                await new Promise(resolve => setTimeout(resolve, 1000))
+                return getSessionWithRetry(attempt + 1)
+              }
+              throw sessionError
+            }
+            
+            return { data: { session }, error: sessionError }
+          } catch (error) {
+            if (attempt < 3) {
+              console.log(`UserProvider: Session fetch failed, retrying...`)
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              return getSessionWithRetry(attempt + 1)
+            }
+            throw error
+          }
+        }
         
         try {
-          const { data: { session }, error: sessionError } = await Promise.race([sessionPromise, timeoutPromise])
+          const { data: { session }, error: sessionError } = await getSessionWithRetry()
         
           if (sessionError) {
-            console.error('UserProvider: getSession error:', sessionError)
-        } else {
+            console.error('UserProvider: Final session error after retries:', sessionError)
+            if (mountedRef.current) {
+              setLoading(false)
+            }
+          } else {
             console.log('UserProvider: Initial session result:', session?.user?.email || 'none')
             await handleAuthUser(session?.user, 'initial')
           }
-        } catch (timeoutError) {
-          console.error('UserProvider: getSession timeout - setting loading to false')
+        } catch (error) {
+          console.error('UserProvider: Session fetch failed after all retries:', error)
           if (mountedRef.current) {
-          setLoading(false)
+            setLoading(false)
           }
         }
         
