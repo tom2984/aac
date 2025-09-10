@@ -22,30 +22,32 @@ function AcceptInviteForm() {
   const [error, setError] = useState('');
   const [inviteValid, setInviteValid] = useState<boolean | null>(null);
   const [inviteData, setInviteData] = useState<any>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     const validateInvite = async () => {
       // Check for token first (new secure system)
       const rawToken = searchParams.get('token');
       // Fix URL decoding issue: + characters in base64 tokens get decoded as spaces
-      const token = rawToken?.replace(/ /g, '+');
+      const processedToken = rawToken?.replace(/ /g, '+');
+      setToken(processedToken);
       console.log('🎯 Raw token from URL:', rawToken);
-      console.log('🔧 Fixed token (spaces→+):', token);
-      console.log('🎯 Token length:', token?.length);
+      console.log('🔧 Fixed token (spaces→+):', processedToken);
+      console.log('🎯 Token length:', processedToken?.length);
       
-      if (token) {
+      if (processedToken) {
         try {
           // Validate token and get invite data
-          console.log('🔍 Validating token:', token.substring(0, 8) + '...');
+          console.log('🔍 Validating token:', processedToken.substring(0, 8) + '...');
           console.log('🔍 Current time:', new Date().toISOString());
           console.log('🌐 Current URL:', window.location.href);
-          console.log('🔗 Full token for manual debugging:', token);
+          console.log('🔗 Full token for manual debugging:', processedToken);
           
           // First check if token exists at all
           const { data: tokenCheck, error: tokenCheckError } = await supabase
             .from('invite_tokens')
             .select('*')
-            .eq('token', token)
+            .eq('token', processedToken)
             .single();
           
           console.log('📊 Token exists check:', { tokenCheck, tokenCheckError });
@@ -54,7 +56,7 @@ function AcceptInviteForm() {
           const { data: invite, error: inviteError } = await supabase
             .from('invite_tokens')
             .select('*')
-            .eq('token', token)
+            .eq('token', processedToken)
             .eq('status', 'pending')
             .gt('expires_at', new Date().toISOString())
             .single();
