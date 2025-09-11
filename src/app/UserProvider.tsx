@@ -158,7 +158,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Simplified session refresh for manual use only
-  const refreshSession = async () => {
+  const refreshSession = async (): Promise<void> => {
     try {
       console.log('UserProvider: Manual session refresh requested')
       
@@ -168,7 +168,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (refreshedSession && refreshedSession.user) {
         console.log('UserProvider: Session refreshed successfully')
         setUser(refreshedSession.user)
-        return refreshedSession
+        return
       }
       
       // If refresh failed, try to get current session
@@ -177,7 +177,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (session && session.user) {
         console.log('UserProvider: Current session is valid')
         setUser(session.user)
-        return session
+        return
       } else if (error || refreshError) {
         console.error('UserProvider: Session refresh failed:', error || refreshError)
         setUser(null)
