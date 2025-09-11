@@ -6,6 +6,42 @@ import { supabase } from '@/lib/supabase'
 import PersonalSettingsCard from './PersonalSettingsCard'
 import TeamMembersTable from './TeamMembersTable'
 
+// Helper function to get all team member IDs for team-based access
+async function getTeamMemberIds(userId: string, invitedBy: string | null): Promise<string[]> {
+  const teamMemberIds = new Set<string>()
+  
+  // Always include the current user
+  teamMemberIds.add(userId)
+  
+  // If this user was invited by someone, include the inviter (team root)
+  if (invitedBy) {
+    teamMemberIds.add(invitedBy)
+    
+    // Also include all other people invited by the same admin
+    const { data: siblings } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('invited_by', invitedBy)
+      .neq('id', userId) // Don't include self again
+    
+    if (siblings) {
+      siblings.forEach((sibling: any) => teamMemberIds.add(sibling.id))
+    }
+  }
+  
+  // Include all people this user has invited (their team members)
+  const { data: invitees } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('invited_by', userId)
+  
+  if (invitees) {
+    invitees.forEach((invitee: any) => teamMemberIds.add(invitee.id))
+  }
+  
+  return Array.from(teamMemberIds)
+}
+
 type TeamMember = {
   id: string;
   email: string;
@@ -40,39 +76,117 @@ const SettingsPage = () => {
   const [testMode, setTestMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch team members (all users invited by this admin)
-  useEffect(() => {
-    const fetchTeamMembers = async () => {
-      if (!user) return;
+  // Handle removing team members
+  const handleRemoveMember = async (memberId: string, memberEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${memberEmail} from the team?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
       
-      try {
-        // Get all profiles where invited_by matches the current user
-        const { data: teamMembers, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('invited_by', user.id)
-          .order('created_at', { ascending: false });
+      // Deactivate the user profile (safer than deleting)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: 'inactive' })
+        .eq('id', memberId);
 
-        if (error) {
-          console.error('Error fetching team members:', error);
-          return;
-        }
+      if (error) throw error;
 
-        if (teamMembers) {
-          // Separate employees from admins/managers
+      // Refresh the team members list
+      const fetchTeamMembers = async () => {
+        if (!user || !profile) return;
+        
+        try {
+          let teamMembers: TeamMember[] = [];
+          
+          if (profile.role === 'admin' || profile.role === 'manager') {
+            const teamMemberIds = await getTeamMemberIds(user.id, profile.invited_by);
+            
+            const { data: allTeamMembers, error } = await supabase
+              .from('profiles')
+              .select('*')
+              .in('invited_by', teamMemberIds)
+              .neq('id', user.id)
+              .eq('status', 'active') // Only show active members
+              .order('created_at', { ascending: false });
+
+            if (error) {
+              console.error('Error fetching team members:', error);
+              return;
+            }
+
+            teamMembers = allTeamMembers || [];
+          }
+
           const employeeList = teamMembers.filter(member => member.role === 'employee');
           const adminManagerList = teamMembers.filter(member => ['admin', 'manager'].includes(member.role));
           
           setEmployees(employeeList);
           setAdminsAndManagers(adminManagerList);
+          
+        } catch (error) {
+          console.error('Error fetching team members:', error);
         }
+      };
+
+      await fetchTeamMembers();
+      alert(`${memberEmail} has been successfully removed from the team.`);
+      
+    } catch (error) {
+      console.error('Error removing team member:', error);
+      alert('Failed to remove team member. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch team members (full team for admins/managers)
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      if (!user || !profile) return;
+      
+      try {
+        let teamMembers: TeamMember[] = [];
+        
+        if (profile.role === 'admin' || profile.role === 'manager') {
+          // Get team member IDs using same logic as API
+          const teamMemberIds = await getTeamMemberIds(user.id, profile.invited_by);
+          
+          // Get all team members (only active ones)
+          const { data: allTeamMembers, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('invited_by', teamMemberIds)
+            .neq('id', user.id) // Don't include self
+            .eq('status', 'active') // Only show active members
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.error('Error fetching team members:', error);
+            return;
+          }
+
+          teamMembers = allTeamMembers || [];
+        } else {
+          // For employees, no team management access
+          teamMembers = [];
+        }
+
+        // Separate employees from admins/managers
+        const employeeList = teamMembers.filter(member => member.role === 'employee');
+        const adminManagerList = teamMembers.filter(member => ['admin', 'manager'].includes(member.role));
+        
+        setEmployees(employeeList);
+        setAdminsAndManagers(adminManagerList);
+        
       } catch (error) {
         console.error('Error fetching team members:', error);
       }
     };
 
     fetchTeamMembers();
-  }, [user]);
+  }, [user, profile]);
 
   const handleEmailInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
@@ -202,7 +316,7 @@ const SettingsPage = () => {
       <PersonalSettingsCard 
         initialFirstName={profile?.first_name || ''}
         initialLastName={profile?.last_name || ''}
-        initialAvatarUrl={profile?.avatar_url || '/avatar-placeholder.png'}
+        initialAvatarUrl={profile?.avatar_url || '/avatar-placeholder.svg'}
         onSave={async (data) => {
           // Handle profile update logic here if needed
           console.log('Profile update:', data);
@@ -212,7 +326,8 @@ const SettingsPage = () => {
         }}
       />
 
-      {/* Team Management */}
+      {/* Team Management - Only admins can invite */}
+      {profile?.role === 'admin' && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Team Management</h2>
@@ -320,8 +435,10 @@ const SettingsPage = () => {
           </div>
         </div>
       </div>
+      )}
 
-      {/* Team Members List */}
+      {/* Team Members List - Show for admins and managers */}
+      {(profile?.role === 'admin' || profile?.role === 'manager') && (
       <div className="space-y-6">
         {/* Employees Section */}
         {employees.length > 0 && (
@@ -333,12 +450,16 @@ const SettingsPage = () => {
             <div className="p-6">
               <TeamMembersTable 
                 teamMembers={employees.map(emp => ({
+                  id: emp.id,
                   name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'N/A',
                   email: emp.email,
                   status: emp.status === 'active' ? 'Active' : 'Pending',
                   role: emp.role
                 }))}
                 showRole={false}
+                currentUserId={user?.id}
+                currentUserRole={profile?.role}
+                onRemoveMember={handleRemoveMember}
               />
             </div>
           </div>
@@ -354,12 +475,16 @@ const SettingsPage = () => {
             <div className="p-6">
               <TeamMembersTable 
                 teamMembers={adminsAndManagers.map(admin => ({
+                  id: admin.id,
                   name: `${admin.first_name || ''} ${admin.last_name || ''}`.trim() || 'N/A',
                   email: admin.email,
                   status: admin.status === 'active' ? 'Active' : 'Pending',
                   role: admin.role
                 }))}
                 showRole={true}
+                currentUserId={user?.id}
+                currentUserRole={profile?.role}
+                onRemoveMember={handleRemoveMember}
               />
             </div>
           </div>
@@ -371,7 +496,8 @@ const SettingsPage = () => {
             <p className="text-gray-500">No team members found. Start by inviting some team members above!</p>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -16,6 +16,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
+  const initialSessionProcessed = useRef(false)
+  const lastProcessedUserId = useRef<string | null>(null)
 
   const refreshProfile = async () => {
     if (!user) return
@@ -159,19 +161,34 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const refreshSession = async () => {
     try {
       console.log('UserProvider: Manual session refresh requested')
+      
+      // First try to refresh the session token
+      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+      
+      if (refreshedSession && refreshedSession.user) {
+        console.log('UserProvider: Session refreshed successfully')
+        setUser(refreshedSession.user)
+        return refreshedSession
+      }
+      
+      // If refresh failed, try to get current session
       const { data: { session }, error } = await supabase.auth.getSession()
       
       if (session && session.user) {
-        console.log('UserProvider: Session refreshed successfully')
+        console.log('UserProvider: Current session is valid')
         setUser(session.user)
-      } else if (error) {
-        console.error('UserProvider: Session refresh failed:', error)
+        return session
+      } else if (error || refreshError) {
+        console.error('UserProvider: Session refresh failed:', error || refreshError)
         setUser(null)
         setProfile(null)
         setLoading(false)
       }
     } catch (error) {
       console.error('UserProvider: Session refresh exception:', error)
+      setUser(null)
+      setProfile(null)
+      setLoading(false)
     }
   }
 
@@ -185,6 +202,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     let authListener: any = null
+    let authStateChangeTimeout: NodeJS.Timeout | null = null
+    
+    // Handle browser tab visibility changes to prevent unnecessary re-authentication
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && lastProcessedUserId.current) {
+        console.log('UserProvider: Tab became visible, user already authenticated - no action needed')
+      }
+    }
+    
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
 
     const handleAuthUser = async (authUser: any, source: string) => {
       if (!mountedRef.current) return
@@ -195,84 +224,50 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         // Set user immediately
         setUser(authUser)
         
+        // Track this user as processed to prevent duplicate events
+        lastProcessedUserId.current = authUser.id
+        
         // Create basic profile with email
-          const basicProfile = { 
+        const basicProfile = { 
           id: authUser.id,
           email: authUser.email,
-            role: 'admin', 
-            status: 'active',
-            first_name: '',
-            last_name: '',
-            avatar_url: ''
-          }
-          
-          setProfile(basicProfile)
-        // Don't stop loading immediately - wait for real profile fetch
-        console.log('UserProvider: Set basic profile, starting profile fetch...')
+          role: 'admin', 
+          status: 'active',
+          first_name: '',
+          last_name: '',
+          avatar_url: ''
+        }
         
-        // Add timeout protection to prevent hanging
-        const profileTimeout = setTimeout(() => {
-          console.error('🚨 UserProvider: Profile operation timeout - forcing loading to stop')
-          if (mountedRef.current) setLoading(false)
-        }, 8000) // 8 second timeout
-        
-        // Try to fetch real profile immediately
+        setProfile(basicProfile)
+        // Fetch real profile to replace basic profile
         try {
-          console.log('UserProvider: Starting profile fetch...')
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', authUser.id)
             .single()
-        
-          clearTimeout(profileTimeout) // Clear timeout on successful fetch
           
           if (profileError) {
             console.error('UserProvider: Profile fetch error:', profileError.code, profileError.message)
             
             if (profileError.code === 'PGRST116') {
-              console.log('UserProvider: No profile found, creating one...')
-              
-              // Simple profile creation - one attempt only
-              try {
-                const { data: newProfile, error: createError } = await supabase
-                  .from('profiles')
-                  .insert({
-                    id: authUser.id,
-                    email: authUser.email,
-                    role: authUser.user_metadata?.role || 'employee',
-                    status: 'active',
-                    first_name: authUser.user_metadata?.first_name || '',
-                    last_name: authUser.user_metadata?.last_name || ''
-                  })
-                  .select()
-                  .single()
-                
-                if (!createError && newProfile && mountedRef.current) {
-                  console.log('UserProvider: Created profile:', newProfile)
-                  setProfile(newProfile)
-                } else {
-                  console.error('UserProvider: Profile creation failed:', createError)
-                }
-              } catch (createErr) {
-                console.error('UserProvider: Profile creation exception:', createErr)
-              }
+              // Profile doesn't exist - keep the basic profile we set earlier
+              console.log('UserProvider: No profile found in database, using basic profile')
             }
-            // ALWAYS set loading to false after profile operations
+            // Set loading to false after profile operations
             if (mountedRef.current) setLoading(false)
             
           } else if (profileData && mountedRef.current) {
-            console.log('UserProvider: ✅ Loaded existing profile:', profileData)
+            console.log('UserProvider: ✅ Profile loaded successfully')
             setProfile(profileData)
-            setLoading(false) // Stop loading after successful profile fetch
+            setLoading(false)
           } else {
             // Fallback - no profile data but no error
-            console.warn('UserProvider: ⚠️ No profile data returned, stopping loading')
+            console.log('UserProvider: No profile data returned, using basic profile')
             if (mountedRef.current) setLoading(false)
           }
           
         } catch (profileErr) {
-          clearTimeout(profileTimeout)
           console.error('UserProvider: ❌ Profile operation exception:', profileErr)
           // ALWAYS stop loading on exceptions
           if (mountedRef.current) setLoading(false)
@@ -284,6 +279,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
           setProfile(null)
           setLoading(false)
+          lastProcessedUserId.current = null
         }
     }
 
@@ -291,28 +287,55 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       try {
         console.log('UserProvider: Setting up auth listener...')
         
-        // Set up auth state change listener
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Set up auth state change listener - only for real auth changes, not initial load
+        const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (!mountedRef.current) return
-          console.log('UserProvider: Auth state changed:', event, session?.user?.email || 'none')
           
-          // Handle all auth events that indicate a user is signed in
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || (event === 'INITIAL_SESSION' && session)) {
-            console.log('UserProvider: Detected sign-in event, processing user...')
-            await handleAuthUser(session?.user, `listener-${event}`)
-          } else if (event === 'SIGNED_OUT' || !session) {
-            console.log('UserProvider: Detected sign-out event, clearing user...')
-            await handleAuthUser(null, `listener-${event}`)
+          // Skip INITIAL_SESSION - handled by initAuth
+          if (event === 'INITIAL_SESSION') {
+            console.log('UserProvider: Skipping INITIAL_SESSION (handled by initAuth)')
+            return
           }
-    })
+          
+          // Skip SIGNED_IN if we've already processed this user (prevents duplicate processing)
+          if (event === 'SIGNED_IN' && session?.user?.id && lastProcessedUserId.current === session.user.id) {
+            console.log('UserProvider: Skipping SIGNED_IN - already authenticated this user:', session.user.email)
+            return
+          }
+          
+          // Skip TOKEN_REFRESHED events - these are automatic and don't need user processing
+          if (event === 'TOKEN_REFRESHED') {
+            console.log('UserProvider: Token refreshed silently (no user processing needed)')
+            return
+          }
+          
+          // Debounce rapid auth state changes to prevent loops
+          if (authStateChangeTimeout) {
+            clearTimeout(authStateChangeTimeout)
+          }
+          
+          authStateChangeTimeout = setTimeout(async () => {
+            if (!mountedRef.current) return
+            
+            console.log('UserProvider: Auth state changed:', event, session?.user?.email || 'none')
+            
+            // Handle genuine auth events (excluding TOKEN_REFRESHED which is handled above)
+            if (event === 'SIGNED_IN') {
+              console.log('UserProvider: Processing genuine sign-in event')
+              await handleAuthUser(session?.user, `listener-${event}`)
+            } else if (event === 'SIGNED_OUT' || !session) {
+              console.log('UserProvider: Detected sign-out event, clearing user...')
+              await handleAuthUser(null, `listener-${event}`)
+              initialSessionProcessed.current = false // Reset for next session
+              lastProcessedUserId.current = null // Reset user tracking
+            }
+          }, 100)
+        })
 
         authListener = listener
         
-        console.log('UserProvider: Getting initial session...')
-    
-        // Simple session fetch - no complex retry logic
+        // Get initial session once - this handles the initial authentication state
         try {
-          console.log('UserProvider: Getting initial session...')
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         
           if (sessionError) {
@@ -322,7 +345,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             console.log('UserProvider: Initial session result:', session?.user?.email || 'none')
-            await handleAuthUser(session?.user, 'initial')
+            // Process initial session - this is the definitive auth state on app load
+            await handleAuthUser(session?.user, 'initial-session')
+            initialSessionProcessed.current = true // Mark that we've processed initial session
           }
         } catch (error) {
           console.error('UserProvider: Session fetch failed:', error)
@@ -347,8 +372,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.log('UserProvider: Cleaning up...')
       mountedRef.current = false
       
+      if (authStateChangeTimeout) {
+        clearTimeout(authStateChangeTimeout)
+      }
+      
       if (authListener?.subscription) {
         authListener.subscription.unsubscribe()
+      }
+      
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
     }
   }, []) // Run only once

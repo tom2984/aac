@@ -50,8 +50,23 @@ export async function POST(request: Request) {
       
       console.log('✅ User created with auto-confirmed email:', data.user?.id)
       
-      // Create profile record
+      // Create profile record with invite relationship
       if (data.user) {
+        let invitedBy = null
+        
+        // Get the invited_by relationship from the invite token
+        if (inviteToken) {
+          const { data: inviteData } = await supabaseAdmin
+            .from('invite_tokens')
+            .select('invited_by')
+            .eq('token', inviteToken)
+            .eq('status', 'pending')
+            .single()
+          
+          invitedBy = inviteData?.invited_by || null
+          console.log('✅ Found invite relationship - invited_by:', invitedBy)
+        }
+        
         const { error: profileError } = await supabaseAdmin
           .from('profiles')
           .insert({
@@ -61,6 +76,7 @@ export async function POST(request: Request) {
             last_name: lastName,
             role: role || 'employee',
             status: 'active',
+            invited_by: invitedBy
           })
         
         if (profileError) {

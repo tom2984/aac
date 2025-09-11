@@ -50,10 +50,37 @@ export const useFilteredForms = (filters: FormFilters = {}): UseFilteredFormsRes
       setLoading(true)
       setError(null)
 
-      // Get current session for auth token
-      const { data: { session } } = await supabase.auth.getSession()
+      // Get current session for auth token with retry for token refresh
+      let session = null
+      let retryCount = 0
+      const maxRetries = 3
+
+      while (retryCount < maxRetries) {
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (currentSession?.access_token) {
+          session = currentSession
+          break
+        }
+        
+        if (sessionError) {
+          console.warn('Session error, attempting token refresh:', sessionError)
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          if (refreshedSession?.access_token) {
+            session = refreshedSession
+            break
+          }
+        }
+        
+        retryCount++
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms before retry
+        }
+      }
+
       if (!session?.access_token) {
-        setError('Not authenticated')
+        console.warn('No valid session after retries, user may need to re-login')
+        setError('Authentication session expired. Please refresh the page.')
         setForms([])
         setAvailableUsers([])
         setAvailableModules([])
@@ -112,6 +139,69 @@ export const useFilteredForms = (filters: FormFilters = {}): UseFilteredFormsRes
     filters.search,
     filters.adminId
   ])
+
+  // Set up real-time subscription for form updates
+  useEffect(() => {
+    const setupSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) return
+
+      const subscription = supabase
+        .channel('forms-updates')
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'forms'
+          }, 
+          (payload) => {
+            console.log('🔄 New form created, refreshing list')
+            fetchForms() // Refresh the entire list to respect permissions
+          }
+        )
+        .on('postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public', 
+            table: 'forms'
+          },
+          (payload) => {
+            console.log('🔄 Form updated, refreshing list')
+            fetchForms() // Refresh the entire list to respect permissions
+          }
+        )
+        .on('postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public', 
+            table: 'forms'
+          },
+          (payload) => {
+            console.log('🔄 Form deleted, refreshing list')
+            fetchForms() // Refresh the entire list to respect permissions
+          }
+        )
+        .on('postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public', 
+            table: 'form_responses'
+          },
+          (payload) => {
+            console.log('🔄 New form response submitted, refreshing list')
+            fetchForms() // Refresh to update form status counts
+          }
+        )
+        .subscribe()
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+
+    setupSubscription()
+  }, [])
 
   return {
     forms,

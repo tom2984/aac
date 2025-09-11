@@ -62,9 +62,9 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single()
 
-    if (profileError || !currentUserProfile || !['admin', 'manager'].includes(currentUserProfile.role)) {
-      console.log('❌ Admin/Manager check failed:', { profileError, currentUserProfile, userId: user.id })
-      return NextResponse.json({ error: 'Unauthorized: Only admins and managers can send invitations' }, { status: 403 })
+    if (profileError || !currentUserProfile || currentUserProfile.role !== 'admin') {
+      console.log('❌ Admin check failed:', { profileError, currentUserProfile, userId: user.id })
+      return NextResponse.json({ error: 'Unauthorized: Only admins can send invitations' }, { status: 403 })
     }
 
     console.log('✅ Admin verification successful for user:', user.id)

@@ -3,7 +3,7 @@
 import React, { useRef, useState, ChangeEvent, useEffect } from "react";
 import { useUser } from '@/app/UserProvider';
 
-const defaultAvatar = "/avatar-placeholder.png";
+const defaultAvatar = "/avatar-placeholder.svg";
 
 type PersonalSettingsCardProps = {
   initialFirstName?: string;
@@ -107,6 +107,9 @@ const PersonalSettingsCard: React.FC<PersonalSettingsCardProps> = ({
             className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-gray-200"
             tabIndex={0}
             aria-label="Profile picture"
+            onError={(e) => {
+              e.currentTarget.src = "/avatar-placeholder.svg";
+            }}
           />
           <button
             type="button"

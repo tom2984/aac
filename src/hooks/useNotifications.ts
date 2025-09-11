@@ -36,10 +36,37 @@ export const useNotifications = (unreadOnly = false, limit = 20) => {
       }
       setError(null)
 
-      // Get current session for auth token
-      const { data: { session } } = await supabase.auth.getSession()
+      // Get current session for auth token with retry
+      let session = null
+      let retryCount = 0
+      const maxRetries = 2
+
+      while (retryCount < maxRetries) {
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (currentSession?.access_token) {
+          session = currentSession
+          break
+        }
+        
+        if (sessionError) {
+          console.warn('Session error in notifications, attempting token refresh:', sessionError)
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          if (refreshedSession?.access_token) {
+            session = refreshedSession
+            break
+          }
+        }
+        
+        retryCount++
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      }
+
       if (!session?.access_token) {
-        setError('Not authenticated')
+        console.warn('No valid session for notifications after retries')
+        setError('Authentication session expired')
         return
       }
 

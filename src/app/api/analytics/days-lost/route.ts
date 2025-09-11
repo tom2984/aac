@@ -1,6 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Helper function to get all team member IDs for team-based access
+async function getTeamMemberIds(supabaseAdmin: any, userId: string, invitedBy: string | null): Promise<string[]> {
+  const teamMemberIds = new Set<string>()
+  
+  // Always include the current user
+  teamMemberIds.add(userId)
+  
+  // If this user was invited by someone, include the inviter (team root)
+  if (invitedBy) {
+    teamMemberIds.add(invitedBy)
+    
+    // Also include all other people invited by the same admin
+    const { data: siblings } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('invited_by', invitedBy)
+      .neq('id', userId) // Don't include self again
+    
+    if (siblings) {
+      siblings.forEach((sibling: any) => teamMemberIds.add(sibling.id))
+    }
+  }
+  
+  // Include all people this user has invited (their team members)
+  const { data: invitees } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .eq('invited_by', userId)
+  
+  if (invitees) {
+    invitees.forEach((invitee: any) => teamMemberIds.add(invitee.id))
+  }
+  
+  return Array.from(teamMemberIds)
+}
+
 function getSupabaseClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -89,9 +125,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    // 🔒 SECURITY: Only admins can access analytics data
-    if (currentUserProfile.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    // 🔒 SECURITY: Only admins and managers can access analytics data
+    if (currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'manager') {
+      return NextResponse.json({ error: 'Admin or manager access required' }, { status: 403 })
     }
 
     // Get filter parameters from URL
@@ -102,9 +138,14 @@ export async function GET(request: NextRequest) {
     let formsQuery = supabaseAdmin.from('forms').select('*')
     
     // 🔒 SECURITY: Filter forms based on user permissions
-    if (currentUserProfile.role === 'admin') {
-      // Admins can only see forms they created
-      formsQuery = formsQuery.eq('created_by', currentUser.id)
+    if (currentUserProfile.role === 'admin' || currentUserProfile.role === 'manager') {
+      // Get team members for team-based access
+      const teamMemberIds = await getTeamMemberIds(supabaseAdmin, currentUser.id, currentUserProfile.invited_by)
+      
+      console.log(`🔒 Analytics team access for ${currentUserProfile.role} ${currentUser.email}:`, teamMemberIds)
+      
+      // Admins/Managers can see analytics for forms created by anyone in their team
+      formsQuery = formsQuery.in('created_by', teamMemberIds)
     } else if (currentUserProfile.role === 'employee') {
       // Employees can only see forms assigned to them
       const { data: assignedForms } = await supabaseAdmin

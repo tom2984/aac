@@ -1,6 +1,7 @@
 import React from 'react';
 
 type TeamMember = {
+  id: string;
   name: string;
   email: string;
   status: string;
@@ -10,9 +11,18 @@ type TeamMember = {
 type TeamMembersTableProps = {
   teamMembers: TeamMember[];
   showRole?: boolean;
+  currentUserId?: string;
+  currentUserRole?: string;
+  onRemoveMember?: (memberId: string, memberEmail: string) => void;
 };
 
-const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRole = false }) => {
+const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ 
+  teamMembers, 
+  showRole = false, 
+  currentUserId,
+  currentUserRole,
+  onRemoveMember 
+}) => {
   if (teamMembers.length === 0) return null;
 
   const copyInviteLink = async (email: string) => {
@@ -36,7 +46,14 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRo
             <div className="flex flex-col space-y-3">
               <div>
                 <div className="text-sm font-medium text-gray-700 mb-1">Email</div>
-                <div className="text-sm text-gray-900 break-all">{member.email}</div>
+                <div className="text-sm text-gray-900 break-all flex items-center gap-2">
+                  {member.email}
+                  {member.id === currentUserId && (
+                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+                      You
+                    </span>
+                  )}
+                </div>
               </div>
               
               {showRole && (
@@ -62,14 +79,24 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRo
                   </span>
                 </div>
                 
-                {member.status === 'Pending' && (
-                  <button
-                    onClick={() => copyInviteLink(member.email)}
-                    className="px-3 py-2 text-[#FF6551] hover:text-[#ff7a6b] text-sm font-medium font-inter focus:outline-none focus:ring-2 focus:ring-[#FF6551] focus:ring-offset-1 rounded-md border border-[#FF6551] hover:border-[#ff7a6b]"
-                  >
-                    Copy Link
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {member.status === 'Pending' && (
+                    <button
+                      onClick={() => copyInviteLink(member.email)}
+                      className="px-3 py-1 text-[#FF6551] hover:text-[#ff7a6b] text-xs font-medium font-inter focus:outline-none focus:ring-2 focus:ring-[#FF6551] focus:ring-offset-1 rounded-md border border-[#FF6551] hover:border-[#ff7a6b]"
+                    >
+                      Copy Link
+                    </button>
+                  )}
+                  {member.id !== currentUserId && currentUserRole === 'admin' && onRemoveMember && (
+                    <button
+                      onClick={() => onRemoveMember(member.id, member.email)}
+                      className="px-3 py-1 text-red-600 hover:text-red-700 text-xs font-medium font-inter focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded-md border border-red-600 hover:border-red-700"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -92,7 +119,16 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRo
           <tbody>
             {teamMembers.map((member, idx) => (
               <tr key={member.email + idx} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-3 px-4 font-inter text-sm">{member.email}</td>
+                <td className="py-3 px-4 font-inter text-sm">
+                  <div className="flex items-center gap-2">
+                    {member.email}
+                    {member.id === currentUserId && (
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+                        You
+                      </span>
+                    )}
+                  </div>
+                </td>
                 {showRole && (
                   <td className="py-3 px-4 font-inter">
                     <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
@@ -112,14 +148,24 @@ const TeamMembersTable: React.FC<TeamMembersTableProps> = ({ teamMembers, showRo
                   </span>
                 </td>
                 <td className="py-3 px-4 font-inter">
-                  {member.status === 'Pending' && (
-                    <button
-                      onClick={() => copyInviteLink(member.email)}
-                      className="text-[#FF6551] hover:text-[#ff7a6b] text-sm font-medium font-inter focus:outline-none focus:underline"
-                    >
-                      Copy Invite Link
-                    </button>
-                  )}
+                  <div className="flex gap-2">
+                    {member.status === 'Pending' && (
+                      <button
+                        onClick={() => copyInviteLink(member.email)}
+                        className="text-[#FF6551] hover:text-[#ff7a6b] text-sm font-medium font-inter focus:outline-none hover:underline"
+                      >
+                        Copy Link
+                      </button>
+                    )}
+                    {member.id !== currentUserId && currentUserRole === 'admin' && onRemoveMember && (
+                      <button
+                        onClick={() => onRemoveMember(member.id, member.email)}
+                        className="text-red-600 hover:text-red-700 text-sm font-medium font-inter focus:outline-none hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
