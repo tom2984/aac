@@ -160,12 +160,12 @@ export class HubSpotAPIClient {
         }, 0);
         
         // For the current month, show today's date, otherwise show month/year
-        const now = new Date();
+        const currentDate = new Date();
         let name;
-        const isCurrentMonth = startDate.getFullYear() === now.getFullYear() && startDate.getMonth() === now.getMonth();
+        const isCurrentMonth = startDate.getFullYear() === currentDate.getFullYear() && startDate.getMonth() === currentDate.getMonth();
         if (isCurrentMonth) {
           // Current month - show "17 Sep" format (today's date)
-          name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          name = currentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
         } else {
           // Historical months - show "Sep 24" format
           name = startDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
