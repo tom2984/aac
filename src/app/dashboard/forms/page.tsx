@@ -212,12 +212,12 @@ export default function FormsPage() {
         const availableUsers = result.metadata?.availableUsers || []
         
         console.log(`✅ Forms API returned ${availableUsers.length} available users:`, 
-          availableUsers.map(u => ({ email: u.email, role: u.role })))
+          availableUsers.map((u: any) => ({ email: u.email, role: u.role })))
         
         // Filter to only show employees for form assignment
         const employeesOnly = availableUsers.filter(user => user.role === 'employee')
         console.log(`🎯 Filtered to ${employeesOnly.length} employees only:`, 
-          employeesOnly.map(u => ({ email: u.email, role: u.role })))
+          employeesOnly.map((u: any) => ({ email: u.email, role: u.role })))
         
         setAvailableEmployees(employeesOnly)
         
@@ -235,12 +235,12 @@ export default function FormsPage() {
         
         if (!dbError && data) {
           console.log(`✅ Fallback found ${data.length} users:`, 
-            data.map(u => ({ email: u.email, role: u.role })))
+            data.map((u: any) => ({ email: u.email, role: u.role })))
           
           // Filter fallback data to only show employees
           const employeesOnly = data.filter(user => user.role === 'employee')
           console.log(`🎯 Fallback filtered to ${employeesOnly.length} employees only:`, 
-            employeesOnly.map(u => ({ email: u.email, role: u.role })))
+            employeesOnly.map((u: any) => ({ email: u.email, role: u.role })))
           
           setAvailableEmployees(employeesOnly)
         } else {

@@ -166,7 +166,7 @@ const SettingsPage = () => {
             .order('created_at', { ascending: false });
           
           console.log(`🔍 Settings: Found ${allTeamMembers?.length || 0} team members:`, 
-            allTeamMembers?.map(u => ({ email: u.email, role: u.role })))
+            allTeamMembers?.map((u: any) => ({ email: u.email, role: u.role })))
 
           if (error) {
             console.error('Error fetching team members:', error);
