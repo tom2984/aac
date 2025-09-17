@@ -180,20 +180,75 @@ export default function FormsPage() {
     fetchPresetQuestions()
   }, [user])
 
-  // Fetch available employees for current admin
+  // Fetch available employees using Forms API (which has proper team logic)
   useEffect(() => {
     const fetchEmployees = async () => {
       if (!user?.id) return
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, first_name, last_name')
-        .eq('role', 'employee')
-        .eq('invited_by', user.id)
-        .eq('status', 'active')
-      if (!error && data) {
-        setAvailableEmployees(data)
+      
+      try {
+        console.log('🔍 Fetching available employees via Forms API...')
+        
+        // Get current session for auth token
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) {
+          console.error('❌ No valid session found')
+          return
+        }
+        
+        // Call the Forms API to get available users with proper team logic
+        const response = await fetch('/api/forms', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          }
+        })
+        
+        if (!response.ok) {
+          console.error('❌ Forms API failed:', response.status, response.statusText)
+          return
+        }
+        
+        const result = await response.json()
+        const availableUsers = result.metadata?.availableUsers || []
+        
+        console.log(`✅ Forms API returned ${availableUsers.length} available users:`, 
+          availableUsers.map(u => ({ email: u.email, role: u.role })))
+        
+        // Filter to only show employees for form assignment
+        const employeesOnly = availableUsers.filter(user => user.role === 'employee')
+        console.log(`🎯 Filtered to ${employeesOnly.length} employees only:`, 
+          employeesOnly.map(u => ({ email: u.email, role: u.role })))
+        
+        setAvailableEmployees(employeesOnly)
+        
+      } catch (error) {
+        console.error('❌ Error fetching employees via Forms API:', error)
+        
+        // 🚨 FALLBACK: Use direct query if API fails
+        console.log('⚠️ Falling back to direct database query...')
+        const { data, error: dbError } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, role')
+          .neq('id', user.id) // Don't include self
+          .eq('status', 'active')
+          .order('first_name')
+        
+        if (!dbError && data) {
+          console.log(`✅ Fallback found ${data.length} users:`, 
+            data.map(u => ({ email: u.email, role: u.role })))
+          
+          // Filter fallback data to only show employees
+          const employeesOnly = data.filter(user => user.role === 'employee')
+          console.log(`🎯 Fallback filtered to ${employeesOnly.length} employees only:`, 
+            employeesOnly.map(u => ({ email: u.email, role: u.role })))
+          
+          setAvailableEmployees(employeesOnly)
+        } else {
+          console.error('❌ Fallback also failed:', dbError)
+        }
       }
     }
+    
     fetchEmployees()
   }, [user?.id])
 

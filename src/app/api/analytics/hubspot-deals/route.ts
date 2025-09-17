@@ -49,7 +49,18 @@ function generateMonthlyData(snapshots: any[]) {
   for (let i = 11; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const month = date.toISOString().slice(0, 7); // YYYY-MM
-    const name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+    
+    // For the current month (i = 0), show today's date, otherwise show month/year
+    let name;
+    if (i === 0) {
+      // Current month - show "17 Sep" format (today's date)
+      name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    } else {
+      // Historical months - show "Sep 24" format
+      name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+    }
+    
+    console.log('📅 Monthly data generated:', { i, month, name, isCurrentMonth: i === 0 });
     
     const snapshot = snapshots.find((s: any) => s.snapshot_date.startsWith(month));
     
@@ -90,7 +101,18 @@ async function generateAdvancedNegotiationsHistory(
   for (let i = monthsBack - 1; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthKey = date.toISOString().slice(0, 7);
-    const name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+    
+    // For the current month (i = 0), show today's date, otherwise show month/year
+    let name;
+    if (i === 0) {
+      // Current month - show "17 Sep" format (today's date)
+      name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    } else {
+      // Historical months - show "Sep 24" format
+      name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+    }
+    
+    console.log('📅 Generated data point:', { i, monthKey, name, isCurrentMonth: i === 0 });
     
     // Check if we have a snapshot for this month
     const existingSnapshot = existingSnapshots?.find((s: any) => 
@@ -413,9 +435,22 @@ export async function GET(request: NextRequest) {
       
       for (let i = 11; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        
+        // For the current month (i = 0), show today's date, otherwise show month/year
+        let name;
+        if (i === 0) {
+          // Current month - show "17 Sep" format (today's date)
+          name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        } else {
+          // Historical months - show "Sep 24" format
+          name = date.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+        }
+        
+        console.log('📅 Historical closed won data generated:', { i, month: date.toISOString().slice(0, 7), name, isCurrentMonth: i === 0 });
+        
         historicalClosedWon.push({
           month: date.toISOString().slice(0, 7),
-          name: date.toLocaleString('en-GB', { month: 'short', year: '2-digit' }),
+          name,
           totalAmount: i === 0 ? currentClosedWonAmount : 0, // Only show current amount in current month
           dealCount: i === 0 ? closedWonDeals.length : 0,
           deals: i === 0 ? closedWonDeals : []
@@ -542,7 +577,19 @@ export async function GET(request: NextRequest) {
         
         while (currentMonth <= endMonth) {
           const monthKey = currentMonth.toISOString().slice(0, 7);
-          const name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+          
+          // For the current month, show today's date, otherwise show month/year
+          let name;
+          const isCurrentMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth();
+          if (isCurrentMonth) {
+            // Current month - show "17 Sep" format (today's date)
+            name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          } else {
+            // Historical months - show "Sep 24" format
+            name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+          }
+          
+          console.log('📅 Filtered monthly data (up to 1 year) generated:', { monthKey, name, isCurrentMonth });
           
           // Find the corresponding data from our historical chart data
           const historicalData = chartData.find((item: any) => item.month === monthKey);
@@ -587,7 +634,19 @@ export async function GET(request: NextRequest) {
         
         while (currentMonth <= endMonth) {
           const monthKey = currentMonth.toISOString().slice(0, 7);
-          const name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+          
+          // For the current month, show today's date, otherwise show month/year
+          let name;
+          const isCurrentMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth();
+          if (isCurrentMonth) {
+            // Current month - show "17 Sep" format (today's date)
+            name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          } else {
+            // Historical months - show "Sep 24" format
+            name = currentMonth.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+          }
+          
+          console.log('📅 Filtered monthly data (longer period) generated:', { monthKey, name, isCurrentMonth });
           
           // Find the corresponding data from our historical chart data
           const historicalData = chartData.find((item: any) => item.month === monthKey);
@@ -649,6 +708,7 @@ export async function GET(request: NextRequest) {
       closedWon: periodClosedWonTotal,
       dataPoints: filteredChartData.length,
       explanation: 'Advanced Negotiations = pipeline value at END of selected period (not sum)',
+      currentAdvancedAmountFromHubSpot: currentAdvancedAmount,
       periodBreakdown: filteredChartData.map((item: any, index: number) => ({
         position: index + 1,
         date: item.name,
@@ -658,7 +718,17 @@ export async function GET(request: NextRequest) {
       finalValueUsed: filteredChartData.length > 0 ? {
         date: filteredChartData[filteredChartData.length - 1]?.name,
         amount: filteredChartData[filteredChartData.length - 1]?.advancedNegotiations
-      } : null
+      } : null,
+      hubspotDealsDetails: {
+        totalDealsFound: advancedNegotiationsDeals.length,
+        dealsAmounts: advancedNegotiationsDeals.slice(0, 5).map((deal: any) => ({
+          id: deal.id,
+          name: deal.properties?.dealname,
+          amount: deal.properties?.amount,
+          parsedAmount: parseFloat(deal.properties?.amount || '0')
+        })),
+        calculatedTotal: currentAdvancedAmount
+      }
     });
 
 

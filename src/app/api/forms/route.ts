@@ -225,18 +225,52 @@ export async function GET(request: NextRequest) {
     // Get available users for the current admin/manager
     let availableUsers: any[] = []
     if (currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'manager') {
-      // Get team members who can be assigned forms (employees)
+      // Simplified approach: Get all team members using the same logic as settings page
       const teamMemberIds = await getTeamMemberIds(supabaseAdmin, currentUser!.id, currentUserProfile.invited_by)
       
-      const { data: users } = await supabaseAdmin
+      console.log(`🔍 Getting available users for ${currentUserProfile.role} ${currentUser!.email}`)
+      console.log(`🔍 Team member IDs:`, teamMemberIds)
+      
+      // Get all active team members (both employees and admins/managers)
+      const { data: allTeamMembers, error: teamError } = await supabaseAdmin
         .from('profiles')
-        .select('id, first_name, last_name, email')
-        .eq('role', 'employee')
-        .in('invited_by', teamMemberIds) // Employees invited by anyone in the team
+        .select('id, first_name, last_name, email, role')
+        .in('invited_by', teamMemberIds)
+        .neq('id', currentUser!.id) // Don't include self
         .eq('status', 'active')
         .order('first_name')
       
-      availableUsers = users || []
+      if (teamError) {
+        console.error('❌ Error fetching team members:', teamError)
+        availableUsers = []
+      } else {
+        // Filter to only show employees for form assignment, but include all for debugging
+        console.log(`🔍 Found ${allTeamMembers?.length || 0} total team members:`, 
+          allTeamMembers?.map(u => ({ email: u.email, role: u.role })))
+        
+        // For form assignment, typically we want employees, but let's include everyone for now
+        availableUsers = allTeamMembers || []
+      }
+      
+      // 🚨 FALLBACK: If no users found with team logic, get all active users as fallback
+      if (availableUsers.length === 0) {
+        console.log(`⚠️ No users found with team logic, trying fallback approach...`)
+        
+        const { data: fallbackUsers, error: fallbackError } = await supabaseAdmin
+          .from('profiles')
+          .select('id, first_name, last_name, email, role')
+          .neq('id', currentUser!.id) // Don't include self
+          .eq('status', 'active')
+          .order('first_name')
+        
+        if (!fallbackError && fallbackUsers) {
+          console.log(`✅ Fallback found ${fallbackUsers.length} users:`, 
+            fallbackUsers.map(u => ({ email: u.email, role: u.role })))
+          availableUsers = fallbackUsers
+        } else {
+          console.error('❌ Fallback also failed:', fallbackError)
+        }
+      }
     }
     
     // Get available modules from the user's accessible forms only

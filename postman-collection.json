@@ -1,0 +1,115 @@
+{
+  "info": {
+    "name": "AAC Email Webhooks",
+    "description": "Test collection for all AAC email webhook data structures",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Signup Confirmation Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@example.com\",\n  \"confirmationUrl\": \"https://yoursite.com/auth/confirm?token=abc123xyz789\",\n  \"timestamp\": \"2024-12-17T10:30:00.000Z\"\n}"
+        },
+        "url": {
+          "raw": "{{MAKE_SIGNUP_CONFIRMATION_WEBHOOK_URL}}",
+          "host": ["{{MAKE_SIGNUP_CONFIRMATION_WEBHOOK_URL}}"]
+        },
+        "description": "Tests the signup confirmation email webhook data structure"
+      }
+    },
+    {
+      "name": "Employee Invitation Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee@example.com\",\n  \"adminName\": \"John Smith\",\n  \"inviteLink\": \"https://yoursite.com/accept-invite?token=inv123xyz789\",\n  \"role\": \"employee\"\n}"
+        },
+        "url": {
+          "raw": "{{MAKE_EMPLOYEE_WEBHOOK_URL}}",
+          "host": ["{{MAKE_EMPLOYEE_WEBHOOK_URL}}"]
+        },
+        "description": "Tests the employee invitation email webhook data structure"
+      }
+    },
+    {
+      "name": "Admin Invitation Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"adminName\": \"John Smith\",\n  \"inviteLink\": \"https://yoursite.com/accept-invite?token=inv123xyz789\",\n  \"role\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "{{MAKE_ADMIN_WEBHOOK_URL}}",
+          "host": ["{{MAKE_ADMIN_WEBHOOK_URL}}"]
+        },
+        "description": "Tests the admin invitation email webhook data structure"
+      }
+    },
+    {
+      "name": "Form Response Notification Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipientEmail\": \"manager@example.com\",\n  \"questionText\": \"How many hours were lost due to weather?\",\n  \"formattedAnswer\": \"8 hours\",\n  \"formTitle\": \"Daily Progress Report\",\n  \"submitterName\": \"Jane Doe\",\n  \"responseId\": \"resp_123456\",\n  \"questionId\": \"q_789012\"\n}"
+        },
+        "url": {
+          "raw": "{{MAKE_NOTIFICATION_WEBHOOK_URL}}",
+          "host": ["{{MAKE_NOTIFICATION_WEBHOOK_URL}}"]
+        },
+        "description": "Tests the form response notification email webhook data structure"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "MAKE_SIGNUP_CONFIRMATION_WEBHOOK_URL",
+      "value": "https://hook.make.com/your-signup-confirmation-webhook-url",
+      "description": "Make.com webhook URL for signup confirmation emails"
+    },
+    {
+      "key": "MAKE_EMPLOYEE_WEBHOOK_URL", 
+      "value": "https://hook.make.com/your-employee-webhook-url",
+      "description": "Make.com webhook URL for employee invitation emails"
+    },
+    {
+      "key": "MAKE_ADMIN_WEBHOOK_URL",
+      "value": "https://hook.make.com/your-admin-webhook-url", 
+      "description": "Make.com webhook URL for admin invitation emails"
+    },
+    {
+      "key": "MAKE_NOTIFICATION_WEBHOOK_URL",
+      "value": "https://hook.make.com/your-notification-webhook-url",
+      "description": "Make.com webhook URL for form response notification emails"
+    }
+  ]
+}

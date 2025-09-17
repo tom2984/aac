@@ -1,0 +1,10 @@
+[33m98e99e1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix: TypeScript error in UserProvider refreshSession return type
+[33mb79853e[m feat: Complete team data sharing and notification improvements
+[33mdf35c75[m Simplify auth flow - remove complex retry logic
+[33m77d7aa7[m Fix build error and all onboarding issues
+[33m4939517[m Fix loading hangs ghost mode and redirect issues
+[33m17ea0ff[m Fix critical onboarding issues: token parsing, ghost mode, and stuck creation
+[33m3fc8933[m Fix onboarding stuck issues: improve redirects and retry logic
+[33m4000324[m Fix TypeScript error: add null checks for document.cookie
+[33m201a043[m Fix logout issue: nuclear session cleanup for ghost accounts
+[33md8697ea[m Fix token format detection: handle both hex and base64 tokens

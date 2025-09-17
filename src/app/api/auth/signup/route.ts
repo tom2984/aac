@@ -123,22 +123,84 @@ export async function POST(request: Request) {
         session: signInData.session
       })
     } else {
-      console.log('📧 Using standard signup with email confirmation')
-      // Standard signup with email confirmation
-      const { data, error } = await supabase.auth.signUp({
+      console.log('📧 Using custom signup flow with branded confirmation email')
+      // Use service role to create user without triggering Supabase's default email
+      const supabaseAdmin = supabaseServer
+      
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
-        options: signupOptions
+        email_confirm: false, // Don't auto-confirm, we'll send custom email
+        user_metadata: signupOptions.data
       })
       
       if (error) {
-        console.error('❌ Standard signup error:', error)
+        console.error('❌ Admin createUser error:', error)
         return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      
+      console.log('✅ User created with unconfirmed email:', data.user?.id)
+      
+      // Create profile record
+      if (data.user) {
+        const { error: profileError } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            role: role || 'admin',
+            status: 'pending', // Will be active after email confirmation
+            first_name: firstName,
+            last_name: lastName,
+            email: data.user.email,
+            invited_by: null
+          })
+          
+        if (profileError) {
+          console.error('❌ Profile creation error:', profileError)
+        } else {
+          console.log('✅ Profile created for user:', data.user.id)
+        }
+      }
+      
+      // Send our custom confirmation email
+      try {
+        console.log('📧 Sending custom confirmation email to:', email)
+        
+        // Get the site URL - detect local development vs production
+        let siteUrl
+        if (process.env.NODE_ENV === 'development') {
+          // Force localhost for development
+          siteUrl = 'http://localhost:3000'
+          console.log('🔧 Development mode detected - using localhost URL')
+        } else {
+          // Use production URL for deployed environments  
+          siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                   'http://localhost:3000')
+          console.log('🚀 Production mode detected - using production URL:', siteUrl)
+        }
+        
+        const confirmationResponse = await fetch(`${siteUrl}/api/auth/signup-confirmation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email })
+        })
+
+        if (!confirmationResponse.ok) {
+          console.error('❌ Failed to send confirmation email')
+        } else {
+          console.log('✅ Custom confirmation email sent successfully')
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending confirmation email:', emailError)
       }
       
       return NextResponse.json({ 
         user: data.user,
-        session: data.session 
+        session: null, // No session until email is confirmed
+        message: 'Account created successfully. Please check your email for confirmation.'
       })
     }
   } catch (error) {

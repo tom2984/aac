@@ -152,6 +152,15 @@ export default function AnalyticsPage() {
   const [analyticsDateTo, setAnalyticsDateTo] = useState('')
   const [analyticsFilterDrawerOpen, setAnalyticsFilterDrawerOpen] = useState(false)
   
+  // Debug: Log filter state on every render
+  useEffect(() => {
+    console.log('🔍 Analytics Filter State:', { 
+      analyticsDateFrom, 
+      analyticsDateTo, 
+      hasFilters: !!(analyticsDateFrom || analyticsDateTo) 
+    });
+  }, [analyticsDateFrom, analyticsDateTo])
+  
   // Pagination states for focused view
   const [focusedCurrentPage, setFocusedCurrentPage] = useState(1)
   const focusedItemsPerPage = 10
@@ -722,8 +731,16 @@ export default function AnalyticsPage() {
           console.log('📋 Final analyticsStats:', analyticsData.map((d: any) => ({
             key: d.key,
             value: d.value,
-            dataLength: d.data?.length
+            dataLength: d.data?.length,
+            lastDataPoint: d.data && d.data.length > 0 ? d.data[d.data.length - 1] : null,
+            graphMaxValue: d.data ? Math.max(...d.data.map((item: any) => item.value || 0)) : 0
           })));
+          
+          console.log('🔍 Advanced Negotiations Debug:', {
+            apiResponse: response.data.find((item: any) => item.key === 'advanced_negotiations'),
+            displayValue: analyticsData.find((d: any) => d.key === 'advanced_negotiations')?.value,
+            metadata: response.metadata
+          })
           
           setAnalyticsStats(analyticsData)
           setAnalyticsMetadata(response.metadata)
@@ -838,8 +855,15 @@ export default function AnalyticsPage() {
           console.log('✅ HubSpot analytics refreshed successfully:', analyticsData.map((d: any) => ({
             key: d.key,
             value: d.value,
-            dataPoints: d.data?.length || 0
+            dataPoints: d.data?.length || 0,
+            lastDataPoint: d.data && d.data.length > 0 ? d.data[d.data.length - 1] : null
           })))
+          
+          console.log('🔍 Manual Refresh - Advanced Negotiations Debug:', {
+            apiResponse: response.data.find((item: any) => item.key === 'advanced_negotiations'),
+            displayValue: analyticsData.find((d: any) => d.key === 'advanced_negotiations')?.value,
+            metadata: response.metadata
+          })
         }
       } catch (error) {
         console.error('❌ Error refreshing HubSpot analytics:', error)
@@ -2204,6 +2228,18 @@ return (
               </span>
             )}
           </button>
+          {(analyticsDateFrom || analyticsDateTo) && (
+            <button
+              onClick={() => {
+                setAnalyticsDateFrom('');
+                setAnalyticsDateTo('');
+                console.log('🔄 Cleared analytics date filters');
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+            >
+              Clear Filters
+            </button>
+          )}
 
           {/* Desktop filter controls */}
           <div className="hidden sm:flex gap-3">
@@ -2309,12 +2345,26 @@ return (
                   {(() => {
                     // Show the actual last data point date from the chart data
                     const lastDataPoint = stat.data && stat.data.length > 0 ? stat.data[stat.data.length - 1] : null;
-                    const endDate = lastDataPoint ? lastDataPoint.name : 'Sept 25';
+                    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                    const endDate = lastDataPoint ? lastDataPoint.name : today;
+                    
+                    // Debug logging for date display issue
+                    if (stat.key === 'advanced_negotiations') {
+                      console.log('🔍 Date Display Debug:', {
+                        analyticsDateFrom,
+                        analyticsDateTo,
+                        hasDateFilters: !!(analyticsDateFrom || analyticsDateTo),
+                        lastDataPoint,
+                        today,
+                        endDate,
+                        willShow: (analyticsDateTo || analyticsDateFrom) ? `as of ${endDate}` : `as of today`
+                      });
+                    }
                     
                     if (analyticsDateTo || analyticsDateFrom) {
                       return `as of ${endDate}`;
                     } else {
-                      return `as of ${endDate}`;
+                      return `as of today`;
                     }
                   })()
                   }

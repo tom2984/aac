@@ -16,7 +16,15 @@ const AuthForm = ({ mode, setMode }: AuthFormProps) => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [signupSuccess, setSignupSuccess] = useState(false)
   const router = useRouter();
+
+  const handleClearForm = () => {
+    setEmail('')
+    setPassword('')
+    setConfirmPassword('')
+    setMessage(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,33 +39,41 @@ const AuthForm = ({ mode, setMode }: AuthFormProps) => {
 
     try {
       if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        // Use our custom signup API to bypass Supabase's default email
+        const signupResponse = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            role: 'admin',
+            skipEmailConfirmation: false, // We want to send our custom email
+            redirectTo: `${window.location.origin}/auth/callback`
+          })
         })
-        if (error) throw error
+
+        if (!signupResponse.ok) {
+          const errorData = await signupResponse.json()
+          throw new Error(errorData.error || 'Failed to create account')
+        }
+
+        const { user: data, session, error } = await signupResponse.json()
+        if (error) throw new Error(error)
         
-        if (data.user && data.session) {
-          // Create admin profile for new signups
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              role: 'admin',
-              status: 'active',
-            })
-
-          if (profileError) {
-            console.error('Error creating profile:', profileError)
-            // Don't throw error, just log it - user can still proceed
-          }
-
+        if (data && session) {
+          // User was immediately confirmed and signed in
           setTimeout(() => {
             router.push('/dashboard');
           }, 100);
-        } else {
-          setMessage({ type: 'success', text: 'Check your email for the confirmation link!' })
+        } else if (data && !session) {
+          // User needs email confirmation - our custom email was already sent by the API
+          setSignupSuccess(true)
+          setMessage({ type: 'success', text: 'Account created successfully! Please check your email for the confirmation link.' })
+          
+          // Clear form after successful signup
+          handleClearForm()
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -77,6 +93,59 @@ const AuthForm = ({ mode, setMode }: AuthFormProps) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Show success page after successful signup
+  if (signupSuccess && mode === 'signup') {
+    return (
+      <div className="w-full max-w-[500px] mx-auto flex flex-col items-center justify-center px-2 sm:px-4 lg:px-6 py-8 sm:py-12 text-center">
+        <div className="mb-8">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl sm:text-[28px] lg:text-[32px] font-semibold font-inter text-center mb-4">
+            Check Your Email!
+          </h2>
+          <p className="text-gray-600 text-base sm:text-lg mb-6 leading-relaxed">
+            We've sent a confirmation link to<br />
+            <span className="font-semibold text-gray-800">{email}</span>
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-blue-800 text-sm">
+              <strong>Next steps:</strong><br />
+              1. Check your inbox (and spam folder)<br />
+              2. Click the confirmation link<br />
+              3. Access your dashboard
+            </p>
+          </div>
+        </div>
+        
+        <div className="space-y-4 w-full">
+          <button
+            onClick={() => {
+              setSignupSuccess(false)
+              setMessage(null)
+            }}
+            className="w-full h-12 bg-[#FF6551] text-white font-semibold font-inter rounded-full hover:bg-[#FF4C38] transition-colors"
+          >
+            Create Another Account
+          </button>
+          
+          <button
+            onClick={() => {
+              setSignupSuccess(false)
+              setMessage(null)
+              setMode('login')
+            }}
+            className="w-full h-12 bg-gray-100 text-gray-700 font-semibold font-inter rounded-full hover:bg-gray-200 transition-colors"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

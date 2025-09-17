@@ -153,14 +153,20 @@ const SettingsPage = () => {
           // Get team member IDs using same logic as API
           const teamMemberIds = await getTeamMemberIds(user.id, profile.invited_by);
           
-          // Get all team members (only active ones)
+          console.log(`🔍 Settings: Getting team members for ${profile.role} ${user.email}`)
+          console.log(`🔍 Settings: Team member IDs:`, teamMemberIds)
+          
+          // Get all team members (only active ones) - INCLUDE current user
           const { data: allTeamMembers, error } = await supabase
             .from('profiles')
             .select('*')
-            .in('invited_by', teamMemberIds)
-            .neq('id', user.id) // Don't include self
+            .in('id', teamMemberIds) // ✅ Get users whose ID is in the team
+            // REMOVED: .neq('id', user.id) - Now include current user
             .eq('status', 'active') // Only show active members
             .order('created_at', { ascending: false });
+          
+          console.log(`🔍 Settings: Found ${allTeamMembers?.length || 0} team members:`, 
+            allTeamMembers?.map(u => ({ email: u.email, role: u.role })))
 
           if (error) {
             console.error('Error fetching team members:', error);

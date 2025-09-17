@@ -159,9 +159,23 @@ export class HubSpotAPIClient {
           return sum + (parseFloat(deal.properties.amount || '0') || 0);
         }, 0);
         
+        // For the current month, show today's date, otherwise show month/year
+        const now = new Date();
+        let name;
+        const isCurrentMonth = startDate.getFullYear() === now.getFullYear() && startDate.getMonth() === now.getMonth();
+        if (isCurrentMonth) {
+          // Current month - show "17 Sep" format (today's date)
+          name = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        } else {
+          // Historical months - show "Sep 24" format
+          name = startDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' });
+        }
+        
+        console.log('📅 HubSpot historical data generated:', { monthKey, name, isCurrentMonth, totalAmount });
+        
         historicalData.push({
           month: monthKey,
-          name: startDate.toLocaleString('en-GB', { month: 'short', year: '2-digit' }),
+          name,
           totalAmount,
           dealCount: monthDeals.length,
           deals: monthDeals
