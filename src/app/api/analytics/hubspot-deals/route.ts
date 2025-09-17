@@ -572,6 +572,7 @@ export async function GET(request: NextRequest) {
         // Generate data for each month in the selected range
         const currentMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
         const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        const now = new Date(); // Add missing now declaration
         
         console.log('📅 Generating monthly data from', currentMonth.toISOString().slice(0, 7), 'to', endMonth.toISOString().slice(0, 7));
         
@@ -629,6 +630,7 @@ export async function GET(request: NextRequest) {
         // Generate data for each month in the selected range  
         const currentMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
         const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        const now = new Date(); // Add missing now declaration
         
         console.log('📅 Generating monthly data for longer period from', currentMonth.toISOString().slice(0, 7), 'to', endMonth.toISOString().slice(0, 7));
         
