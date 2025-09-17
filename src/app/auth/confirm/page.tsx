@@ -1,10 +1,10 @@
 'use client'
 
 import { useSearchParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export default function ConfirmSignup() {
+function ConfirmSignupContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'expired'>('loading')
@@ -134,5 +134,21 @@ export default function ConfirmSignup() {
         )}
       </div>
     </main>
+  )
+}
+
+export default function ConfirmSignup() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF6551] mx-auto mb-4"></div>
+          <h1 className="text-2xl font-semibold font-inter mb-2">Loading</h1>
+          <p className="text-gray-600">Please wait...</p>
+        </div>
+      </main>
+    }>
+      <ConfirmSignupContent />
+    </Suspense>
   )
 }

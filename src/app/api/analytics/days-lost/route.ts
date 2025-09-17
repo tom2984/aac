@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Force dynamic rendering to allow request.headers access
+export const dynamic = 'force-dynamic'
+
 // Helper function to get all team member IDs for team-based access
 async function getTeamMemberIds(supabaseAdmin: any, userId: string, invitedBy: string | null): Promise<string[]> {
   const teamMemberIds = new Set<string>()

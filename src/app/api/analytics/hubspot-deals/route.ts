@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+// Force dynamic rendering to allow request.headers access
+export const dynamic = 'force-dynamic';
 import { createClient } from '@supabase/supabase-js';
 import { HubSpotAPIClient } from '@/lib/hubspot-api';
 
