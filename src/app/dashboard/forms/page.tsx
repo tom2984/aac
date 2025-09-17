@@ -215,7 +215,7 @@ export default function FormsPage() {
           availableUsers.map((u: any) => ({ email: u.email, role: u.role })))
         
         // Filter to only show employees for form assignment
-        const employeesOnly = availableUsers.filter(user => user.role === 'employee')
+        const employeesOnly = availableUsers.filter((user: any) => user.role === 'employee')
         console.log(`🎯 Filtered to ${employeesOnly.length} employees only:`, 
           employeesOnly.map((u: any) => ({ email: u.email, role: u.role })))
         
@@ -238,7 +238,7 @@ export default function FormsPage() {
             data.map((u: any) => ({ email: u.email, role: u.role })))
           
           // Filter fallback data to only show employees
-          const employeesOnly = data.filter(user => user.role === 'employee')
+          const employeesOnly = data.filter((user: any) => user.role === 'employee')
           console.log(`🎯 Fallback filtered to ${employeesOnly.length} employees only:`, 
             employeesOnly.map((u: any) => ({ email: u.email, role: u.role })))
           
