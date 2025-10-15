@@ -1,7 +1,7 @@
 "use client"
 
 import { AreaChart, Area, ResponsiveContainer, Tooltip, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass, Users, Package, Droplets, LogOut, TrendingUp, Award } from 'lucide-react'
+import { CloudSun, Wrench, Info, CheckCircle2, Clock, Hourglass, Users, Package, Droplets, LogOut, TrendingUp, Award, DollarSign, Percent, Hammer, Users2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { bisector } from 'd3-array'
 import { useForms } from '@/hooks/useForms'
@@ -80,6 +80,46 @@ const analyticsStatsTemplate = [
   },
 ]
 
+// Financial analytics stats template for Xero data
+const financialAnalyticsStatsTemplate = [
+  {
+    key: 'avg_turnover',
+    icon: <DollarSign className="w-6 h-6 text-[#059669]" />,
+    label: 'Average Turnover',
+    deltaColor: 'text-[#059669]',
+    chart: 'green',
+    stroke: '#059669',
+    fill: 'url(#financialGreenArea)',
+  },
+  {
+    key: 'gross_margin',
+    icon: <Percent className="w-6 h-6 text-[#7C3AED]" />,
+    label: 'Gross Margin',
+    deltaColor: 'text-[#7C3AED]',
+    chart: 'purple',
+    stroke: '#7C3AED',
+    fill: 'url(#financialPurpleArea)',
+  },
+  {
+    key: 'material_cost',
+    icon: <Hammer className="w-6 h-6 text-[#DC2626]" />,
+    label: 'Material Cost',
+    deltaColor: 'text-[#DC2626]',
+    chart: 'red',
+    stroke: '#DC2626',
+    fill: 'url(#financialRedArea)',
+  },
+  {
+    key: 'subcontractor_use',
+    icon: <Users2 className="w-6 h-6 text-[#EA580C]" />,
+    label: 'Subcontractor Use',
+    deltaColor: 'text-[#EA580C]',
+    chart: 'orange',
+    stroke: '#EA580C',
+    fill: 'url(#financialOrangeArea)',
+  },
+]
+
 const users = [
   'Leslie Alexander',
   'Dmytro Kalenskyi',
@@ -151,6 +191,11 @@ export default function AnalyticsPage() {
   const [analyticsDateFrom, setAnalyticsDateFrom] = useState('')
   const [analyticsDateTo, setAnalyticsDateTo] = useState('')
   const [analyticsFilterDrawerOpen, setAnalyticsFilterDrawerOpen] = useState(false)
+  
+  // Financial Analytics filtering state
+  const [financialAnalyticsDateFrom, setFinancialAnalyticsDateFrom] = useState('')
+  const [financialAnalyticsDateTo, setFinancialAnalyticsDateTo] = useState('')
+  const [financialAnalyticsFilterDrawerOpen, setFinancialAnalyticsFilterDrawerOpen] = useState(false)
   
   // Debug: Log filter state on every render
   useEffect(() => {
@@ -245,6 +290,9 @@ export default function AnalyticsPage() {
   const [analyticsStats, setAnalyticsStats] = useState<any[]>([])
   const [analyticsStatsLoading, setAnalyticsStatsLoading] = useState(true)
   const [analyticsMetadata, setAnalyticsMetadata] = useState<any>(null)
+  const [financialAnalyticsStats, setFinancialAnalyticsStats] = useState<any[]>([])
+  const [financialAnalyticsStatsLoading, setFinancialAnalyticsStatsLoading] = useState(true)
+  const [financialAnalyticsMetadata, setFinancialAnalyticsMetadata] = useState<any>(null)
   
   // State for filtered focused forms
   const [filteredFocusedForms, setFilteredFocusedForms] = useState<any[]>([])
@@ -875,6 +923,182 @@ export default function AnalyticsPage() {
     fetchHubSpotAnalytics()
   }
 
+  // Financial Analytics stats calculation effect with daily auto-refresh
+  useEffect(() => {
+    const fetchXeroFinancialAnalytics = async (forceRefresh = false) => {
+      try {
+        setFinancialAnalyticsStatsLoading(true)
+        
+        console.log('🔄 Fetching Xero financial analytics with filters...', {
+          dateFrom: financialAnalyticsDateFrom,
+          dateTo: financialAnalyticsDateTo,
+          forceRefresh
+        })
+
+        const queryParams = new URLSearchParams()
+        if (financialAnalyticsDateFrom) queryParams.append('date_from', financialAnalyticsDateFrom)
+        if (financialAnalyticsDateTo) queryParams.append('date_to', financialAnalyticsDateTo)
+        if (forceRefresh) queryParams.append('refresh', 'true')
+
+        const { data: { session } } = await supabase.auth.getSession()
+        const response = await fetch(`/api/analytics/xero-financial?${queryParams.toString()}`, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`API call failed: ${response.status} ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        
+        if (result.success) {
+          const financialData = result.data.map((item: any) => {
+            const template = financialAnalyticsStatsTemplate.find(t => t.key === item.key)
+            
+            if (!template) {
+              console.warn('⚠️ No template found for financial analytics key:', item.key)
+              return null
+            }
+            
+            const data = item.data || []
+            
+            return {
+              ...template,
+              value: item.value,
+              delta: '0%', // No percentages for now
+              data: item.data
+            }
+          }).filter(Boolean)
+          
+          setFinancialAnalyticsStats(financialData)
+          setFinancialAnalyticsMetadata(result.metadata)
+          
+          console.log('✅ Xero financial analytics fetched successfully:', financialData.map((d: any) => ({
+            key: d.key,
+            value: d.value,
+            dataPoints: d.data?.length || 0
+          })))
+          
+          // Store last fetch timestamp for daily refresh tracking
+          localStorage.setItem('xero_financial_analytics_last_fetch', new Date().toISOString())
+          
+        }
+      } catch (error) {
+        console.error('❌ Error fetching Xero financial analytics:', error)
+      } finally {
+        setFinancialAnalyticsStatsLoading(false)
+      }
+    }
+
+    // Check if we need to refresh based on last fetch time
+    const checkForDailyFinancialRefresh = () => {
+      const lastFetch = localStorage.getItem('xero_financial_analytics_last_fetch')
+      if (!lastFetch) {
+        console.log('🔄 No previous financial analytics fetch found - loading data')
+        fetchXeroFinancialAnalytics()
+        return
+      }
+
+      const lastFetchTime = new Date(lastFetch)
+      const now = new Date()
+      const timeDiffHours = (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
+
+      if (timeDiffHours >= 24) {
+        console.log('🔄 Financial analytics data is over 24 hours old - refreshing')
+        fetchXeroFinancialAnalytics(true)
+      } else {
+        console.log(`🔄 Financial analytics data is ${timeDiffHours.toFixed(1)} hours old - fetching existing`)
+        fetchXeroFinancialAnalytics()
+      }
+    }
+
+    checkForDailyFinancialRefresh()
+
+    // Set up daily interval to check for updates (every hour)
+    const dailyFinancialRefreshInterval = setInterval(() => {
+      console.log('⏱️ Checking if daily financial analytics refresh is needed...')
+      const lastFetch = localStorage.getItem('xero_financial_analytics_last_fetch')
+      if (lastFetch) {
+        const lastFetchTime = new Date(lastFetch)
+        const now = new Date()
+        const timeDiffHours = (now.getTime() - lastFetchTime.getTime()) / (1000 * 60 * 60)
+
+        if (timeDiffHours >= 24) {
+          console.log('🔄 Daily financial refresh triggered - updating Xero financial analytics')
+          fetchXeroFinancialAnalytics(true)
+        }
+      }
+    }, 60 * 60 * 1000) // Check every hour
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(dailyFinancialRefreshInterval)
+    }
+  }, []) // Only run once on mount, not on date changes
+
+  // Manual refresh function for Financial Analytics
+  const handleFinancialAnalyticsRefresh = () => {
+    console.log('🔄 Manual financial analytics refresh triggered')
+    const fetchXeroFinancialAnalytics = async () => {
+      try {
+        setFinancialAnalyticsStatsLoading(true)
+        
+        console.log('🔄 Force refreshing Xero financial analytics...')
+        
+        const queryParams = new URLSearchParams()
+        if (financialAnalyticsDateFrom) queryParams.append('date_from', financialAnalyticsDateFrom)
+        if (financialAnalyticsDateTo) queryParams.append('date_to', financialAnalyticsDateTo)
+        queryParams.append('refresh', 'true')
+
+        const { data: { session } } = await supabase.auth.getSession()
+        const response = await fetch(`/api/analytics/xero-financial?${queryParams.toString()}`, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`API call failed: ${response.status} ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        
+        if (result.success) {
+          const financialData = result.data.map((item: any) => {
+            const template = financialAnalyticsStatsTemplate.find(t => t.key === item.key)
+            
+            const data = item.data || []
+            
+            return {
+              ...template,
+              value: item.value,
+              delta: '0%', // No percentages
+              data: item.data
+            }
+          })
+          
+          setFinancialAnalyticsStats(financialData)
+          setFinancialAnalyticsMetadata(result.metadata)
+          console.log('✅ Xero financial analytics refreshed successfully:', financialData.map((d: any) => ({
+            key: d.key,
+            value: d.value,
+            dataPoints: d.data?.length || 0
+          })))
+        }
+      } catch (error) {
+        console.error('❌ Error refreshing Xero financial analytics:', error)
+      } finally {
+        setFinancialAnalyticsStatsLoading(false)
+      }
+    }
+
+    fetchXeroFinancialAnalytics()
+  }
+
   // Manual refresh function for Hours Lost
   const handleHoursLostRefresh = () => {
     console.log('🔄 Manual Hours Lost refresh triggered with filters:', { 
@@ -1185,6 +1409,61 @@ export default function AnalyticsPage() {
 
   // Wrapper component to pass stat context to tooltip
   const FormsTooltipWrapper = (stat: any) => (props: any) => <FormsStatsTooltip {...props} stat={stat} />
+
+  // Custom tooltip for financial analytics with currency/percentage formatting
+  const FinancialTooltip = ({ active, payload, label, stat }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload
+      const currentValue = data.value
+      
+      // Format value based on metric type
+      let formattedValue = ''
+      if (stat?.isCurrency) {
+        // Currency format: £XXX,XXX.XX
+        formattedValue = `£${currentValue.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      } else if (stat?.isPercentage) {
+        // Percentage format: XX.X%
+        formattedValue = `${currentValue.toFixed(1)}%`
+      } else {
+        formattedValue = currentValue.toLocaleString()
+      }
+      
+      // Find previous period's value for comparison
+      const currentIndex = stat?.data?.findIndex((d: any) => d.name === label) || 0
+      const previousValue = currentIndex > 0 ? (stat?.data?.[currentIndex - 1]?.value || 0) : 0
+      const deltaValue = currentValue - previousValue
+      
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg min-w-[200px]">
+          <p className="font-semibold text-gray-900">{label}</p>
+          <p className="text-sm text-gray-800 font-medium">
+            {formattedValue}
+          </p>
+          {previousValue > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <p className="text-xs text-gray-600">
+                Previous month: {stat?.isCurrency 
+                  ? `£${previousValue.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : stat?.isPercentage 
+                    ? `${previousValue.toFixed(1)}%`
+                    : previousValue.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">
+                Change: {deltaValue >= 0 ? '+' : ''}{stat?.isCurrency 
+                  ? `£${Math.abs(deltaValue).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : stat?.isPercentage 
+                    ? `${deltaValue.toFixed(1)}%`
+                    : deltaValue.toLocaleString()}
+              </p>
+            </div>
+          )}
+        </div>
+      )
+    }
+    return null
+  }
+  
+  const FinancialTooltipWrapper = (stat: any) => (props: any) => <FinancialTooltip {...props} stat={stat} />
 
   const handleChartMouseMove = (stat: any, e: any) => {
     if (!e || !e.activeLabel) {
@@ -1775,9 +2054,9 @@ export default function AnalyticsPage() {
     // Pass JSON to parent or API
   };
 
-return (
-  <AdminOnly>
-    <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8" ref={chartContainerRef}>
+  return (
+    <AdminOnly>
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8" ref={chartContainerRef}>
     {/* Breadcrumb */}
     <div className="text-sm text-gray-400 font-inter mb-2 flex items-center gap-2">
       <span className="text-gray-700 font-medium">Dashboard</span>
@@ -2603,6 +2882,114 @@ return (
       }}
         />  
     </div>
-  </AdminOnly>
-)
+    
+    {/* Financial Analytics Section */}
+    <div className="bg-white rounded-2xl p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 sm:gap-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg sm:text-xl font-semibold font-inter">Financial Analytics</h2>
+            <span className="bg-[#F2F2F2] text-[#272937] text-xs font-medium font-inter rounded px-3 py-1">
+              Xero Data
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 font-inter">
+            Track financial metrics from Xero accounting data (last 12 months)
+          </p>
+        </div>
+      </div>
+
+      {/* Financial Analytics Charts Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        {financialAnalyticsStatsLoading ? (
+          // Loading state
+          financialAnalyticsStatsTemplate.map((stat, i) => (
+            <div key={i} className="bg-white border border-[#E5E7EB] rounded-xl p-4 sm:p-6 animate-pulse">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="bg-gray-200 w-12 h-12 rounded-xl"></div>
+                  <div>
+                    <div className="bg-gray-200 h-4 w-32 rounded mb-2"></div>
+                    <div className="bg-gray-200 h-3 w-20 rounded"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-200 h-48 rounded-lg"></div>
+            </div>
+          ))
+        ) : (
+          financialAnalyticsStats.map((stat, i) => (
+            <div key={i} className="bg-white border border-[#E5E7EB] rounded-xl p-4 sm:p-6 hover:border-[#FF6551] transition-colors cursor-pointer group"
+              onClick={() => {
+                const chartData = stat.data || []
+                setDrawerData({ stat, dataPoint: null })
+                setDrawerOpen(true)
+              }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="bg-[#F8F9FA] border border-[#E5E7EB] group-hover:border-[#FF6551] group-hover:bg-[#FFF5F4] transition-colors rounded-xl p-3 flex items-center justify-center">
+                    {stat.icon}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium mb-1">{stat.label}</p>
+                    <span className="text-xl sm:text-2xl font-bold text-[#272937]">{stat.value}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-48 sm:h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={stat.data || []}
+                    margin={{ top: 5, right: 10, left: 0, bottom: 35 }}
+                    onMouseMove={e => handleChartMouseMove(stat, e)}
+                    onMouseLeave={handleChartMouseLeave}
+                  >
+                    <defs>
+                      <linearGradient id="financialGreenArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#059669" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="financialPurpleArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#7C3AED" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#7C3AED" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="financialRedArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#DC2626" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#DC2626" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="financialOrangeArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#EA580C" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#EA580C" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{
+                        fontSize: 12,
+                        fill: '#9CA3AF',
+                        fontWeight: 500
+                      }}
+                      axisLine={false}
+                      interval="preserveStartEnd"
+                      height={25}
+                      tickMargin={5}
+                      angle={0}
+                    />
+                    <YAxis hide />
+
+                    <Tooltip content={FinancialTooltipWrapper(stat)} />
+                    <Area type="monotone" dataKey="value" stroke={stat.stroke} fill={stat.fill} strokeWidth={2} dot={{ r: 4, fill: 'transparent', stroke: 'transparent' }} isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+    </AdminOnly>
+  )
 }

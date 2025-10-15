@@ -5,6 +5,8 @@ import { useUser } from '@/app/UserProvider'
 import { supabase } from '@/lib/supabase'
 import PersonalSettingsCard from './PersonalSettingsCard'
 import TeamMembersTable from './TeamMembersTable'
+import XeroConnectionCard from './XeroConnectionCard'
+import { AdminOnly } from '@/components/RoleGuard'
 
 // Helper function to get all team member IDs for team-based access
 async function getTeamMemberIds(userId: string, invitedBy: string | null): Promise<string[]> {
@@ -331,6 +333,11 @@ const SettingsPage = () => {
           }
         }}
       />
+
+      {/* Xero Integration - Admin Only */}
+      <AdminOnly>
+        <XeroConnectionCard />
+      </AdminOnly>
 
       {/* Team Management - Only admins can invite */}
       {profile?.role === 'admin' && (
