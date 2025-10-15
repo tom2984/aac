@@ -3,11 +3,11 @@ import { supabase } from '@/lib/supabase'
 
 export async function GET(
   request: Request,
-  { params }: { params: { table: string } }
+  { params }: { params: Promise<{ table: string }> }
 ) {
   try {
+    const { table } = await params
     const { searchParams } = new URL(request.url)
-    const table = params.table
     const select = searchParams.get('select') || '*'
     const limit = searchParams.get('limit')
     
@@ -42,10 +42,10 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: { table: string } }
+  { params }: { params: Promise<{ table: string }> }
 ) {
   try {
-    const table = params.table
+    const { table } = await params
     const body = await request.json()
     
     const { data, error } = await supabase
